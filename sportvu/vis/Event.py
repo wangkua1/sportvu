@@ -83,7 +83,7 @@ class Event:
             break
         
         if T_a_index == -1: 
-          print ('EventException')
+          # print ('EventException')
           raise EventException('bad T_a, or bad event')
 
         start_ind = np.max([0, T_a_index-tfr])
