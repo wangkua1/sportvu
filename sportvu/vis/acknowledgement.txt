@@ -1,0 +1,3 @@
+code in vis/ are originally copied from https://github.com/linouk23/NBA-Player-Movements/blob/master/Constant.py
+
+By all means I don't intend to take credits for his code, but 1st the repo had a lot of data that I didn't want to clone, and I wanted to use this piece of code as a submodule in my package. Hence the bad practice of not 
