@@ -29,6 +29,7 @@ val_x, val_t = loader.load_valid()
 
 # model
 x = tf.placeholder(tf.float32, [None, 100, 50, 3])
+keep_prob = tf.placeholder(tf.float32)
 
 #convnet
 def weight_variable(shape):
@@ -55,8 +56,11 @@ b_conv2 = bias_variable([64])
 x_image = x
 h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
 h_pool1 = max_pool_2x2(h_conv1)
-h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
+h_pool1_drop = tf.nn.dropout(h_pool1, keep_prob)
+h_conv2 = tf.nn.relu(conv2d(h_pool1_drop, W_conv2) + b_conv2)
 h_pool2 = max_pool_2x2(h_conv2)
+h_pool2_drop = tf.nn.dropout(h_pool2, keep_prob)
+
 """
 shape
 """
@@ -64,11 +68,10 @@ SHAPE_convlast= 25*13*64
 W_fc1 = weight_variable([SHAPE_convlast, 1024])
 b_fc1 = bias_variable([1024])
 
-h_pool2_flat = tf.reshape(h_pool2, [-1, SHAPE_convlast])
+h_pool2_flat = tf.reshape(h_pool2_drop, [-1, SHAPE_convlast])
 h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
-
-keep_prob = tf.placeholder(tf.float32)
 h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
+
 
 W_fc2 = weight_variable([1024, 2])
 b_fc2 = bias_variable([2])
@@ -90,7 +93,7 @@ accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 sess = tf.InteractiveSession()
 tf.global_variables_initializer().run()
 # Train
-for iter_ind in tqdm(range(1000)):
+for iter_ind in tqdm(range(20000)):
     loaded = loader.next()
     if loaded != None:
         batch_xs, batch_ys = loaded
