@@ -88,6 +88,8 @@ class Event:
 
         start_ind = np.max([0, T_a_index-tfr])
         end_ind = np.min([len(self.moments)-1, T_a_index + tfr])
+        if end_ind - start_ind != 2*tfr:
+          raise EventException('incorrect length')
         self.moments = self.moments[start_ind:end_ind]
 
     def update_radius(self, i, player_circles, ball_circle, annotations, clock_info):

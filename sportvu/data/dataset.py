@@ -11,8 +11,9 @@ class BaseDataset:
     """base class for loading the dataset
     """
 
-    def __init__(self, f_config, fold_index):
+    def __init__(self, f_config, fold_index, load_raw=True):
         # configuration
+        self.fold_index = fold_index    
         self.config = yaml.load(open(f_config, 'rb'))
         assert (fold_index >= 0 and fold_index <
                 self.config['data_config']['N_folds'])
@@ -36,11 +37,13 @@ class BaseDataset:
         self.t_negative = self.config['data_config']['t_negative']
         self.game_ids = self.config['data_config']['game_ids']
         ###
-        self.games = {}
-        for gameid in self.game_ids:
-            with open(os.path.join(game_dir, gameid + '.pkl'), 'rb') as f:
-                raw_data = pickle.load(f)
-            self.games[raw_data['gameid']] = raw_data
+        if load_raw==True:
+            self.games = {}
+            for gameid in self.game_ids:
+                with open(os.path.join(game_dir, gameid + '.pkl'), 'rb') as f:
+                    raw_data = pickle.load(f)
+                self.games[raw_data['gameid']] = raw_data
+        self.val_ind = 0
 
     def _make_annotation_dict(self):
         self.annotation_dict = {}
@@ -65,6 +68,10 @@ class BaseDataset:
                     anno = self.train_annotations[r_ind].copy()
                     anno['gameclock'] += np.random.rand() * self.t_jitter
                     ret = anno
+                ## Hacky (human labellers has some delay, so usually they label a bit after a pnr)
+                ## here we adjust for it...the way I selected this was just by visualizing labels
+                ret['gameclock'] += .6 ## + means earlier in gameclock
+
                 # check not too close to boundary (i.e. not enough frames to make a sequence)
                 e = self.games[anno['gameid']]['events'][ret['eid']]
                 for idx, moment in enumerate(e['moments']):
@@ -76,7 +83,13 @@ class BaseDataset:
                             break # try again...
 
         else:
-            raise Exception("not in training mode")
+            if self.val_ind == len(self.val_annotations): #end, reset
+                self.val_ind =0
+                return None
+            else:
+                ret =  self.train_annotations[self.val_ind]
+                self.val_ind += 1
+                return ret
 
     def _make_annotation(self, gameid, quarter, gameclock,eid):
         return {'gameid': str(gameid), 'quarter': int(quarter), 

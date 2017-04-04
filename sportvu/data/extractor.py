@@ -4,6 +4,7 @@ import yaml
 import os
 from sportvu import data
 import numpy as np
+import yaml
 game_dir = data.constant.game_dir
 
 
@@ -27,8 +28,9 @@ def pictorialize(xx, sample_rate=1, Y_RANGE=100, X_RANGE=50, radius=3):
     WARNING: should really try to vectorize ***
     """
     # some preprocessing to make sure data is within range
-    if Y_RANGE == X_RANGE:
-        xx[xx >= Y_RANGE] = Y_RANGE - 1
+    xx[:,0][xx[:,0] >= Y_RANGE] = Y_RANGE - 1
+    xx[:,1][xx[:,1] >= X_RANGE] = X_RANGE - 1
+    xx[xx <= 0] = 0
     ###
     xx = np.array(xx).astype('int32')
     old_shape = list(xx.shape)
@@ -89,11 +91,9 @@ class BaseExtractor:
             -> resolves possession: which side of the court it's one
     """
 
-    def __init__(self, d0flip=True, d1flip=True, jitter=[3, 3]):
+    def __init__(self, f_config):
         self.augment = True
-        self.d0flip = d0flip
-        self.d1flip = d1flip
-        self.jitter = jitter
+        self.config = yaml.load(open(f_config, 'rb'))['extractor_config']
 
     def extract_raw(self, event):
         """
@@ -118,9 +118,9 @@ class BaseExtractor:
     def extract(self, event):
         x = self.extract_raw(event)
         ctxy = []
-        if self.augment and np.sum(self.jitter) > 0:
-            d0_jit = (np.random.rand() * 2 - 1) * self.jitter[0]
-            d1_jit = (np.random.rand() * 2 - 1) * self.jitter[1]
+        if self.augment and np.sum(self.config['jitter']) > 0:
+            d0_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][0]
+            d1_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][1]
             jit = np.array([d0_jit, d1_jit])
             jit = jit.reshape(1, 2).repeat(len(x[0][0]), axis=0)
             for team in x:
@@ -136,22 +136,30 @@ class BaseExtractor:
             except ValueError:
                 raise ExtractorException()
 
-            tm=pictorialize_team(team_matrix, sample_rate=1,
-                                   Y_RANGE=100, X_RANGE=50,
-                                   radius=0)
+            tm=pictorialize_team(team_matrix, sample_rate=self.config['sample_rate'],
+                                   Y_RANGE=self.config['Y_RANGE'], X_RANGE=self.config['X_RANGE'],
+                                   radius=self.config['radius'])
                 
                 
             ctxy.append(tm)
         ctxy = np.array(ctxy)
+        if len(ctxy.shape) == 1: ## different teams have different length
+            raise ExtractorException()
         ## compress the time dimension
-        cxy = ctxy.sum(1)
-        cxy[cxy>1] = 1
-
-        if self.augment and self.d0flip and np.random.rand>.5:
-            cxy = cxy[:,::-1]
-        if self.augment and self.d1flip and np.random.rand>.5:
-            cxy = cxy[:,:,::-1]
-        return cxy
+        if 'video' in self.config and self.config['video']:
+            if self.augment and self.config['d0flip'] and np.random.rand>.5:
+                ctxy = ctxy[:,:,::-1]
+            if self.augment and self.config['d1flip'] and np.random.rand>.5:
+                ctxy = ctxy[:,:,:,::-1]
+            return ctxy
+        else:
+            cxy = ctxy.sum(1)
+            cxy[cxy>1] = 1
+            if self.augment and self.config['d0flip'] and np.random.rand>.5:
+                cxy = cxy[:,::-1]
+            if self.augment and self.config['d1flip'] and np.random.rand>.5:
+                cxy = cxy[:,:,::-1]
+            return cxy
 
 """
 HalfCourt Extractor
@@ -174,27 +182,39 @@ if __name__ == '__main__':
     from sportvu.data.dataset import BaseDataset
     from sportvu.data.extractor import BaseExtractor
     from loader import BaseLoader
-    ## concurrent
-    import sys
-    sys.path.append('/home/wangkua1/toolboxes/resnet')
-    from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
-    from tqdm import tqdm
-    
     ##
-    dataset=BaseDataset('config/train_rev0.yaml', 0)
-    extractor=BaseExtractor()
-    loader=BaseLoader(dataset, extractor, 32, fraction_positive=1)
+    f_config = 'config/train_rev0.yaml'
+    dataset=BaseDataset(f_config, 0)
+    extractor=BaseExtractor(f_config)
+    loader=BaseLoader(dataset, extractor, 35, fraction_positive=0)
     print ('testing next_batch')
-    batch=loader.next_batch()
+    batch=loader.next_batch(extract=False)
+    for eind,  event in enumerate(batch[0]):
+        event.show('/home/wangkua1/Pictures/vis/%i.mp4'%eind)
 
-    print ("compare loading latency")
-    Q_size = 100
-    N_thread = 32
-    cloader = ConcurrentBatchIterator(loader, max_queue_size=Q_size, num_threads=N_thread)
-    N = 100
-    for i in tqdm(xrange(N), desc='multi thread Q size %i, N thread %i'%(Q_size, N_thread)):
-        b = cloader.next()
+    ## visualize model input
+    # import  matplotlib.pyplot as plt
+    # plt.ion()
+    # for x in batch[0]:
+    #     img = np.rollaxis(x, 0, 3)
+    #     plt.imshow(img)
+    #     raw_input()
+    
 
-    for i in tqdm(xrange(N), desc='single thread'):
-        b = loader.next()
+    # ## concurrent
+    # import sys
+    # sys.path.append('/home/wangkua1/toolboxes/resnet')
+    # from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
+    # from tqdm import tqdm
+    
+    # print ("compare loading latency")
+    # Q_size = 100
+    # N_thread = 32
+    # cloader = ConcurrentBatchIterator(loader, max_queue_size=Q_size, num_threads=N_thread)
+    # N = 100
+    # for i in tqdm(xrange(N), desc='multi thread Q size %i, N thread %i'%(Q_size, N_thread)):
+    #     b = cloader.next()
+
+    # for i in tqdm(xrange(N), desc='single thread'):
+    #     b = loader.next()
 
