@@ -33,6 +33,7 @@ class ConvNet2d:
         self.d2 = config['d2']
         self.conv_layers = config['conv_layers']
         self.fc_layers = config['fc_layers']
+        self.value_keep_prob = config['keep_prob']
     # convnet
 
     def build(self):
@@ -82,9 +83,14 @@ class ConvNet2d:
         self.keep_prob = keep_prob
         self.logits = y
 
-    def input(self, x, keep_prob):
-        return {self.x: x,
-                self.keep_prob: keep_prob}
+    def input(self, x, keep_prob=None):
+        if keep_prob == None: #default, 'training'
+            return {self.x: x,
+                    self.keep_prob: self.value_keep_prob}
+        else:
+            return {self.x: x,
+                    self.keep_prob: keep_prob}
+
 
     def output(self):
         return self.logits

@@ -8,6 +8,7 @@ Arguments:
     <f_model_config> example 'model/config/conv2d-3layers.yaml'
 
 Example:
+    python train.py data/config/train_rev0.yaml model/config/conv2d-3layers.yaml
 """
 
 from __future__ import absolute_import
@@ -71,7 +72,7 @@ for iter_ind in tqdm(range(20000)):
         loader.reset()
         continue
     batch_xs = np.rollaxis(batch_xs, 1, 4)
-    feed_dict = net.input(batch_xs, .5)
+    feed_dict = net.input(batch_xs)
     feed_dict[y_] = batch_ys
     train_step.run(feed_dict=feed_dict)
     if iter_ind % 100 == 0:
