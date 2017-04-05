@@ -3,6 +3,7 @@
 Usage:
 	test_docopt.py <dir-name>
 	test_docopt.py --list <dir-names>
+	test_docopt.py <dir-name> <dummy>
 
 """
 from docopt import docopt

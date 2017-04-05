@@ -1,0 +1,10 @@
+class_name: ConvNet3d
+### Dataset Configuration
+model_config: 
+    d1: 100
+    d2: 50
+    dt: 80
+    conv_layers: [[5, 5, 5, 3, 32], [5, 5, 5, 32, 64]]
+    fc_layers: [512, 2]
+    keep_prob: .5
+    t_downsample: 4

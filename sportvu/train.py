@@ -9,6 +9,7 @@ Arguments:
 
 Example:
     python train.py 0 data/config/train_rev0.yaml model/config/conv2d-3layers.yaml
+    python train.py 0 data/config/train_rev0_vid.yaml model/config/conv3d-1.yaml
 """
 
 from __future__ import absolute_import
@@ -18,6 +19,7 @@ import numpy as np
 # model
 import tensorflow as tf
 from sportvu.model.convnet2d import ConvNet2d
+from sportvu.model.convnet3d import ConvNet3d
 # data
 from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import BaseExtractor
@@ -42,11 +44,11 @@ model_config = yaml.load(open(f_model_config, 'rb'))
 dataset = BaseDataset(f_data_config, int(arguments['<fold_index>']), load_raw=False)
 extractor = BaseExtractor(f_data_config)
 loader = PreprocessedLoader(dataset, extractor, None, fraction_positive=0.5)
-Q_size = 1000
+Q_size = 100
 N_thread = 32
 val_x, val_t = loader.load_valid()
-# cloader = ConcurrentBatchIterator(
-#     loader, max_queue_size=Q_size, num_threads=N_thread)
+cloader = ConcurrentBatchIterator(
+    loader, max_queue_size=Q_size, num_threads=N_thread)
 
 
 net = eval(model_config['class_name'])(model_config['model_config'])
@@ -65,13 +67,18 @@ sess = tf.InteractiveSession()
 tf.global_variables_initializer().run()
 # Train
 for iter_ind in tqdm(range(20000)):
-    loaded = loader.next()
+    loaded = cloader.next()
     if loaded is not None:
         batch_xs, batch_ys = loaded
     else:
-        loader.reset()
+        cloader.reset()
         continue
-    batch_xs = np.rollaxis(batch_xs, 1, 4)
+    if model_config['class_name'] == 'ConvNet2d':
+        batch_xs = np.rollaxis(batch_xs, 1, 4)
+    elif model_config['class_name'] == 'ConvNet3d':
+        batch_xs = np.rollaxis(batch_xs, 1, 5)
+    else:
+        raise Exception('input format not specified')
     feed_dict = net.input(batch_xs)
     feed_dict[y_] = batch_ys
     train_step.run(feed_dict=feed_dict)
@@ -82,7 +89,13 @@ for iter_ind in tqdm(range(20000)):
         print("step %d, training accuracy %g" % (iter_ind, train_accuracy))
 
         # validate trained model
-        feed_dict = net.input(np.rollaxis(val_x, 1, 4), 1)
+        if model_config['class_name'] == 'ConvNet2d':
+            val_x = np.rollaxis(val_x, 1, 4)
+        elif model_config['class_name'] == 'ConvNet3d':
+            val_x = np.rollaxis(val_x, 1, 5)
+        else:
+            raise Exception('input format not specified')
+        feed_dict = net.input(val_x, 1)
         feed_dict[y_] = val_t    
         print(sess.run(accuracy, feed_dict=feed_dict))
         # print(sess.run(accuracy, feed_dict={x: val_x.reshape(val_x.shape[0], -1),

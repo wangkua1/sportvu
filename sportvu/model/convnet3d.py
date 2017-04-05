@@ -1,25 +1,27 @@
 from __future__ import division
 import tensorflow as tf
 import numpy as np
-from utils import * 
+from utils import *
 
-class ConvNet2d:
+class ConvNet3d:
     """
 
     """
 
     def __init__(self, config):
         self.config = config
+        self.dt = config['dt']
         self.d1 = config['d1']
         self.d2 = config['d2']
         self.conv_layers = config['conv_layers']
         self.fc_layers = config['fc_layers']
         self.value_keep_prob = config['keep_prob']
+        self.t_downsample = config['t_downsample']
     # convnet
 
     def build(self):
         # placeholders
-        x = tf.placeholder(tf.float32, [None, self.d1, self.d2, 3])
+        x = tf.placeholder(tf.float32, [None, self.dt ,self.d1, self.d2, 3])
         keep_prob = tf.placeholder(tf.float32)
 
         # init weights/bias
@@ -32,6 +34,8 @@ class ConvNet2d:
 
         SHAPE_convlast = int(np.ceil(self.d1 / (2**len(self.conv_layers))) *
                              np.ceil(self.d2 / (2**len(self.conv_layers))) *
+                             np.ceil(np.ceil(self.dt / self.t_downsample) 
+                                            / (2**len(self.conv_layers))) *
                              self.conv_layers[-1][-1])
         # fc
         W_fc = []
@@ -44,11 +48,12 @@ class ConvNet2d:
 
         # build model
         # conv
-        h_pool_drop = x
+        h_pool_drop = tf.nn.max_pool3d(x, ksize=[1, self.t_downsample, 1, 1, 1],
+                          strides=[1, self.t_downsample, 1, 1, 1], padding='SAME')
         for layer_ind in xrange(len(self.conv_layers)):
             h_conv = tf.nn.relu(
-                conv2d(h_pool_drop, W_conv[layer_ind]) + b_conv[layer_ind])
-            h_pool = max_pool_2x2(h_conv)
+                conv3d(h_pool_drop, W_conv[layer_ind]) + b_conv[layer_ind])
+            h_pool = max_pool3d_2x2x2(h_conv)
             h_pool_drop = tf.nn.dropout(h_pool, keep_prob)
         # fc
         h_pool_flat = tf.reshape(h_pool_drop, [-1, SHAPE_convlast])
@@ -81,15 +86,18 @@ if __name__ == '__main__':
     # import numpy as np
 
     net_config = {
+        'dt': 80,
         'd1': 100,
         'd2': 50,
-        'conv_layers': [[5, 5, 3, 32], [5, 5, 32, 64]],
-        'fc_layers': [1024, 2],
+        'conv_layers': [[5, 5, 5, 3, 32], [5, 5, 5, 32, 64]],
+        'fc_layers': [512, 2],
+        'keep_prob': .5,
+        't_downsample': 4
     }
-    net = ConvNet2d(net_config)
-
-    batch_xs = np.random.rand(32, 100, 50, 3)
-    batch_ys = np.array([[0, 1]]).repeat(32, axis=0)
+    net = ConvNet3d(net_config)
+    batch_size = 16
+    batch_xs = np.random.rand(batch_size, 80, 100, 50, 3)
+    batch_ys = np.array([[0, 1]]).repeat(batch_size, axis=0)
 
     net.build()
 
