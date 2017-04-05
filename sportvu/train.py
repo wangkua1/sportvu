@@ -1,14 +1,14 @@
 """train.py
 
 Usage:
-    train.py <f_data_config> <f_model_config> 
+    train.py <fold_index> <f_data_config> <f_model_config> 
 
 Arguments:
     <f_data_config>  example ''data/config/train_rev0.yaml''
     <f_model_config> example 'model/config/conv2d-3layers.yaml'
 
 Example:
-    python train.py data/config/train_rev0.yaml model/config/conv2d-3layers.yaml
+    python train.py 0 data/config/train_rev0.yaml model/config/conv2d-3layers.yaml
 """
 
 from __future__ import absolute_import
@@ -39,7 +39,7 @@ f_data_config = arguments['<f_data_config>']
 f_model_config = arguments['<f_model_config>']
 model_config = yaml.load(open(f_model_config, 'rb'))
 # Initialize dataset/loader
-dataset = BaseDataset(f_data_config, 0, load_raw=False)
+dataset = BaseDataset(f_data_config, int(arguments['<fold_index>']), load_raw=False)
 extractor = BaseExtractor(f_data_config)
 loader = PreprocessedLoader(dataset, extractor, None, fraction_positive=0.5)
 Q_size = 1000
