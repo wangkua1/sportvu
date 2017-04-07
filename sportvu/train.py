@@ -94,6 +94,10 @@ if not os.path.exists('./logs'):
     os.mkdir('./logs')
 tf.summary.scalar('cross_entropy', cross_entropy)
 tf.summary.scalar('accuray', accuracy)
+tf.summary.image('input', net.x, max_outputs = 4)
+tf.summary.histogram('label_distribution', y_)
+tf.summary.histogram('logits', net.logits)
+
 merged = tf.summary.merge_all()
 log_folder = os.path.join('./logs', model_name)
 sess = tf.InteractiveSession()
@@ -101,7 +105,7 @@ sess = tf.InteractiveSession()
 # remove existing log folder for the same model.
 if os.path.exists(log_folder):
     import shutil 
-    shutil.rmtree('./logs/train')
+    shutil.rmtree(log_folder)
 
 train_writer = tf.summary.FileWriter(os.path.join(log_folder, 'train'), sess.graph)
 val_writer = tf.summary.FileWriter(os.path.join(log_folder, 'val'), sess.graph)
