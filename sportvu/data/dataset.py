@@ -44,6 +44,7 @@ class BaseDataset:
                     raw_data = pickle.load(f)
                 self.games[raw_data['gameid']] = raw_data
         self.val_ind = 0
+        self.train_ind = 0
 
     def _make_annotation_dict(self):
         self.annotation_dict = {}
@@ -58,8 +59,8 @@ class BaseDataset:
             for quarter_ind in game.keys():
                 game[quarter_ind] = np.sort(game[quarter_ind])[::-1]
 
-    def propose_positive_Ta(self, jitter=True, train=True):
-        if train:
+    def propose_positive_Ta(self, jitter=True, train=True, loop=False):
+        if not loop: #sampling from training annotations
             while True:
                 r_ind = np.random.randint(0, len(self.train_annotations))
                 if not jitter:
@@ -83,13 +84,22 @@ class BaseDataset:
                             break # try again...
 
         else:
-            if self.val_ind == len(self.val_annotations): #end, reset
-                self.val_ind =0
-                return None
+            if train:
+                if self.train_ind == len(self.train_annotations): #end, reset
+                    self.train_ind = 0
+                    return None
+                else:
+                    ret =  self.train_annotations[self.train_ind]
+                    self.train_ind += 1
+                    return ret
             else:
-                ret =  self.train_annotations[self.val_ind]
-                self.val_ind += 1
-                return ret
+                if self.val_ind == len(self.val_annotations): #end, reset
+                    self.val_ind = 0
+                    return None
+                else:
+                    ret =  self.val_annotations[self.val_ind]
+                    self.val_ind += 1
+                    return ret
 
     def _make_annotation(self, gameid, quarter, gameclock,eid):
         return {'gameid': str(gameid), 'quarter': int(quarter), 
