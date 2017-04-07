@@ -18,6 +18,13 @@ from __future__ import print_function
 import numpy as np
 # model
 import tensorflow as tf
+import sys
+import os
+if os.environ['HOME'] == '/u/wangkua1': ## jackson guppy
+    sys.path.append('/u/wangkua1/toolboxes/resnet')
+else:
+    sys.path.append('/ais/gobi4/slwang/sports/sportvu/resnet')
+    sys.path.append('/ais/gobi4/slwang/sports/sportvu')
 from sportvu.model.convnet2d import ConvNet2d
 from sportvu.model.convnet3d import ConvNet3d
 # data
@@ -25,8 +32,6 @@ from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import BaseExtractor
 from sportvu.data.loader import PreprocessedLoader, EventLoader
 # concurrent
-import sys
-sys.path.append('/u/wangkua1/toolboxes/resnet')
 from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
 from tqdm import tqdm
 from docopt import docopt
