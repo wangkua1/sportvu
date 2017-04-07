@@ -5,76 +5,13 @@ import os
 from sportvu import data
 import numpy as np
 import yaml
+from utils import pictorialize_team, pictorialize_fast,make_3teams_11players
 game_dir = data.constant.game_dir
 
 
 class ExtractorException(Exception):
     pass
 
-
-def create_circle(radius):
-    r_squared = np.arange(-radius, radius + 1)**2
-    dist_to = r_squared[:, None] + r_squared
-    # ones_circle = (dist_to <= radius**2).astype('float32')
-    ones_circle = 1 - dist_to.astype('float32')**2 / ((radius + 1) * 2)**2
-    circle_length = radius * 2 + 1
-    return ones_circle, int(circle_length)
-
-
-def pictorialize(xx, sample_rate=1, Y_RANGE=100, X_RANGE=50, radius=3):
-    """
-    xx of shape (..., 2)
-    return: shape (..., Y_RANGE, X_RANGE) one hot encoded pictures
-    WARNING: should really try to vectorize ***
-    """
-    # some preprocessing to make sure data is within range
-    xx[:,0][xx[:,0] >= Y_RANGE] = Y_RANGE - 1
-    xx[:,1][xx[:,1] >= X_RANGE] = X_RANGE - 1
-    xx[xx <= 0] = 0
-    ###
-    xx = np.array(xx).astype('int32')
-    old_shape = list(xx.shape)
-    Y_RANGE = Y_RANGE / sample_rate
-    X_RANGE = X_RANGE / sample_rate
-    # reasons behind padding radius is to avoid boundary cases when filling
-    # with circles
-    target = np.zeros(
-        (old_shape[:-1] + [int(Y_RANGE + 2 * radius), int(X_RANGE + 2 * radius)]))
-    nr_xx = xx.reshape(-1, xx.shape[-1])
-    nr_target = target.reshape(-1, target.shape[-2], target.shape[-1])
-    # create the small circle first
-    ones_circle, circle_length = create_circle(radius)
-    circles = ones_circle
-    # fill it up
-    ind0 = np.arange(nr_target.shape[0]).astype('int32')
-    start_x = (nr_xx[:, 0] / sample_rate).astype('int32')
-    start_y = (nr_xx[:, 1] / sample_rate).astype('int32')
-    for ind in xrange(len(ind0)):  # WARNING ***
-        nr_target[ind0[ind], start_x[ind]:start_x[ind] + circle_length,
-                  start_y[ind]:start_y[ind] + circle_length] = circles
-    if radius > 0:
-        nr_target = nr_target[:, radius:-radius,
-                              radius:-radius]  # shave off the padding
-    target = nr_target.reshape((old_shape[:-1] + [int(Y_RANGE), int(X_RANGE)]))
-    return target
-
-
-def pictorialize_team(xx, sample_rate=1, Y_RANGE=100, X_RANGE=50, radius=0):
-    """
-    LEGACY FUNCTION
-    please use caller_f_team to achieve team processing
-    """
-    """
-    xx of shape (..., 2*N_PLAYERS)
-    basically calls pictorialize N_PLAYERS times and combine the results
-    """
-    rolled_xx = np.rollaxis(xx, -1)
-    for sli in xrange(int(rolled_xx.shape[0] / 2)):
-        player = rolled_xx[2 * sli:2 * (sli + 1)]
-        tmp = pictorialize(np.rollaxis(player, 0, len(
-            player.shape)), sample_rate, Y_RANGE, X_RANGE, radius)
-        retval = retval + tmp if sli > 0 else tmp
-    return retval
 
 
 class BaseExtractor:
@@ -113,6 +50,8 @@ class BaseExtractor:
                 else:  # defense
                     defense[def_id].append([player.x, player.y])
                     def_id += 1
+        if not ( len(ball[0]) == len(offense[0]) and len(defense[0]) == len(offense[0])):
+            raise ExtractorException()
         return [ball, offense, defense]
 
     def extract(self, event):
@@ -160,6 +99,36 @@ class BaseExtractor:
             if self.augment and self.config['d1flip'] and np.random.rand>.5:
                 cxy = cxy[:,:,::-1]
             return cxy
+
+    def extract_batch(self, events_arr):
+        sequences = np.array([make_3teams_11players(self.extract_raw(e)) for e in events_arr])
+        if self.augment and np.sum(self.config['jitter']) > 0:
+            d0_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][0]
+            d1_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][1]
+            try: ### hacky: can delete after -- temporary for malformed data (i.e. missing player)
+                sequences[:,:,:,0] += d0_jit    
+            except:
+                raise ExtractorException() 
+            sequences[:,:,:,1] += d1_jit    
+        ## 
+        bctxy = pictorialize_fast(sequences)
+        ## compress the time dimension
+        if 'video' in self.config and self.config['video']:
+            if self.augment and self.config['d0flip'] and np.random.rand>.5:
+                bctxy = bctxy[:,:,:,::-1]
+            if self.augment and self.config['d1flip'] and np.random.rand>.5:
+                bctxy = bctxy[:,:,:,:,::-1]
+            return bctxy
+        else:
+            bcxy = bctxy.sum(2)
+            bcxy[bcxy>1] = 1
+            if self.augment and self.config['d0flip'] and np.random.rand>.5:
+                bcxy = bcxy[:,:,::-1]
+            if self.augment and self.config['d1flip'] and np.random.rand>.5:
+                bcxy = bcxy[:,:,:,::-1]
+            return bcxy
+
+
 
 """
 HalfCourt Extractor

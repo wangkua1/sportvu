@@ -51,12 +51,18 @@ for fold_index in xrange(data_config['data_config']['N_folds']):
     extractor = BaseExtractor(f_data_config)
     loader = BaseLoader(dataset, extractor, 32, fraction_positive=.5)
 
-    vx, vt = loader.load_valid()
+    if 'no_extract' in data_config and data_config['no_extract']:
+        vx, vt = loader.load_valid(False)
+    else:
+        vx, vt = loader.load_valid()
     np.save(os.path.join(curr_folder, 'vx'), vx)
     np.save(os.path.join(curr_folder, 'vt'), vt)
 
     for batch_index  in tqdm(xrange(int(data_config['n_batches']))):
-        x, t = loader.next()
+        if 'no_extract' in data_config and  data_config['no_extract']:
+            x, t = loader.next_batch(False)
+        else:
+            x, t = loader.next()
         np.save(os.path.join(curr_folder, '%ix'%batch_index), x)
         np.save(os.path.join(curr_folder, '%it'%batch_index), t)
 

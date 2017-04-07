@@ -23,7 +23,7 @@ from sportvu.model.convnet3d import ConvNet3d
 # data
 from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import BaseExtractor
-from sportvu.data.loader import PreprocessedLoader
+from sportvu.data.loader import PreprocessedLoader, EventLoader
 # concurrent
 import sys
 sys.path.append('/u/wangkua1/toolboxes/resnet')
@@ -31,6 +31,7 @@ from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
 from tqdm import tqdm
 from docopt import docopt
 import yaml
+import gc
 
 arguments = docopt(__doc__)
 print ("...Docopt... ")
@@ -39,17 +40,37 @@ print ("............\n")
 
 f_data_config = arguments['<f_data_config>']
 f_model_config = arguments['<f_model_config>']
+data_config = yaml.load(open(f_data_config, 'rb'))
 model_config = yaml.load(open(f_model_config, 'rb'))
+
 # Initialize dataset/loader
 dataset = BaseDataset(f_data_config, int(arguments['<fold_index>']), load_raw=False)
 extractor = BaseExtractor(f_data_config)
-loader = PreprocessedLoader(dataset, extractor, None, fraction_positive=0.5)
+if 'no_extract' in data_config and data_config['no_extract']:
+	loader = EventLoader(dataset, extractor, None, fraction_positive=0.5)
+else:
+	loader = PreprocessedLoader(dataset, extractor, None, fraction_positive=0.5)
 Q_size = 100
-N_thread = 32
-val_x, val_t = loader.load_valid()
-cloader = ConcurrentBatchIterator(
-    loader, max_queue_size=Q_size, num_threads=N_thread)
+N_thread = 4
+# cloader = ConcurrentBatchIterator(
+#     loader, max_queue_size=Q_size, num_threads=N_thread)
+cloader = loader
 
+# # Train
+# cloader.batch_index += 70
+# for iter_ind in tqdm(range(20000)):
+#     # if iter_ind ==0:
+#     loaded = cloader.next()
+#     gc.collect()
+
+
+val_x, val_t = loader.load_valid()
+if model_config['class_name'] == 'ConvNet2d':
+    val_x = np.rollaxis(val_x, 1, 4)
+elif model_config['class_name'] == 'ConvNet3d':
+    val_x = np.rollaxis(val_x, 1, 5)
+else:
+    raise Exception('input format not specified')
 
 net = eval(model_config['class_name'])(model_config['model_config'])
 net.build()
@@ -67,6 +88,7 @@ sess = tf.InteractiveSession()
 tf.global_variables_initializer().run()
 # Train
 for iter_ind in tqdm(range(20000)):
+    # if iter_ind ==0:
     loaded = cloader.next()
     if loaded is not None:
         batch_xs, batch_ys = loaded
@@ -89,12 +111,7 @@ for iter_ind in tqdm(range(20000)):
         print("step %d, training accuracy %g" % (iter_ind, train_accuracy))
 
         # validate trained model
-        if model_config['class_name'] == 'ConvNet2d':
-            val_x = np.rollaxis(val_x, 1, 4)
-        elif model_config['class_name'] == 'ConvNet3d':
-            val_x = np.rollaxis(val_x, 1, 5)
-        else:
-            raise Exception('input format not specified')
+        
         feed_dict = net.input(val_x, 1)
         feed_dict[y_] = val_t    
         print(sess.run(accuracy, feed_dict=feed_dict))

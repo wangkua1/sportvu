@@ -51,6 +51,7 @@ class BaseLoader:
                             # ExtractorException
                             ret_val.append(self.extractor.extract(e))
                         else:
+                            _ = self.extractor.extract_raw(e) ## just to make sure event not malformed (like missing player)
                             ret_val.append(e)
                     except EventException as exc:
                         pass
@@ -158,6 +159,61 @@ class PreprocessedLoader:
 
     def load_valid(self, extract=True):
         x = np.load(os.path.join(self.root_dir , 'vx.npy'))
+        t = np.load(os.path.join(self.root_dir , 'vt.npy'))
+        return x, t
+
+    def reset(self):
+        self.batch_index = 0
+
+class EventLoader:
+    def __init__(self, dataset, extractor, batch_size, mode='sample', fraction_positive=.5):
+        """ 
+        In between Base and Preproc.
+        Loads extracted Events from disk, and does extraction
+        note: a lot faster than Base because it doesn't need to to extraction
+        """
+        self.dataset = dataset # not used
+        self.root_dir = os.path.join(os.path.join(data_dir, self.dataset.config['preproc_dir']), str(self.dataset.fold_index))
+        self.extractor = extractor 
+        self.batch_size = batch_size # not used
+        self.fraction_positive = fraction_positive
+        self.mode = mode
+        self.batch_index = 0
+        self.dataset_size = self.dataset.config['n_batches']
+
+    def next(self):
+        """
+        """
+        if self.mode == 'sample':
+            return self.next_batch()
+        elif self.mode == 'valid':
+            return self.load_valid()
+        else:
+            raise Exception('unknown loader mode')
+
+
+
+    def next_batch(self, extract=True):
+        if self.batch_index==self.dataset_size:
+            return None
+        ## a bit hacky -- temporarily used before dataset fixed..probably can delete when you see this
+        while True:
+            try:
+                x = np.load(os.path.join(self.root_dir , '%ix.npy'%self.batch_index))
+                if extract:
+                    x = self.extractor.extract_batch(x)
+                t = np.load(os.path.join(self.root_dir , '%it.npy'%self.batch_index))
+            except ExtractorException:
+                self.batch_index += 1
+            else:
+                break
+        self.batch_index += 1
+        return x, t
+
+    def load_valid(self, extract=True):
+        x = np.load(os.path.join(self.root_dir , 'vx.npy'))
+        if extract:
+            x = self.extractor.extract_batch(x)
         t = np.load(os.path.join(self.root_dir , 'vt.npy'))
         return x, t
 

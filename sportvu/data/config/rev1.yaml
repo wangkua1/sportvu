@@ -1,0 +1,28 @@
+node1: &randseed 1
+randseed: *randseed
+
+preproc_dir: rev1
+no_extract: True ####
+n_batches: 5000
+batch_size: 32
+### Dataset Configuration
+data_config: 
+    shuffle: True
+    N_folds: 5
+    game_ids: ['0021500357', '0021500278', '0021500150']
+    annotation: 'data/pnr-annotations/gt/rev0.pkl'
+    tfr: 30
+    t_jitter: .3 ## in the scale of gameclock, which is seconds
+    t_negative: 1 ## t_negative seconds away from annotation, in seconds
+
+extractor_config:
+    #augmentation (turned off when validating)
+    d0flip: True
+    d1flip: True
+    jitter: [3, 3]
+    #parametrization
+    sample_rate: 1 #spatial downsample
+    Y_RANGE: 100 # constant (unless not using full court)
+    X_RANGE: 50
+    radius: 0 # not used
+    video: False
