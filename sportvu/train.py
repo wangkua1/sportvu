@@ -1,7 +1,7 @@
 """train.py
 
 Usage:
-    train.py <fold_index> <f_data_config> <f_model_config> 
+    train.py <fold_index> <f_data_config> <f_model_config>
 
 Arguments:
     <f_data_config>  example ''data/config/train_rev0.yaml''
@@ -45,6 +45,7 @@ print ("............\n")
 
 f_data_config = arguments['<f_data_config>']
 f_model_config = arguments['<f_model_config>']
+# pre_trained = arguments['<pre_trained>']
 data_config = yaml.load(open(f_data_config, 'rb'))
 model_config = yaml.load(open(f_model_config, 'rb'))
 model_name = os.path.basename(f_model_config).split('.')[0]
@@ -92,6 +93,9 @@ correct_prediction = tf.equal(tf.argmax(net.output(), 1), tf.argmax(y_, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
 
+# checkpoints 
+if not os.path.exists('./saves'):
+    os.mkdir('./saves')
 # tensorboard
 if not os.path.exists('./logs'):
     os.mkdir('./logs')
@@ -108,6 +112,8 @@ tf.summary.histogram('logits', net.logits)
 
 merged = tf.summary.merge_all()
 log_folder = os.path.join('./logs', model_name)
+
+saver = tf.train.Saver()
 sess = tf.InteractiveSession()
 
 # remove existing log folder for the same model.
@@ -141,13 +147,11 @@ for iter_ind in tqdm(range(20000)):
         feed_dict = net.input(batch_xs, 1)
         feed_dict[y_] = batch_ys    
         train_accuracy = accuracy.eval(feed_dict=feed_dict)
-        print("step %d, training accuracy %g" % (iter_ind, train_accuracy))
         # validate trained model
         feed_dict = net.input(val_x, 1)
         feed_dict[y_] = val_t    
-        print(sess.run(accuracy, feed_dict=feed_dict))
-        summary, _, _ = sess.run([merged, cross_entropy, accuracy], feed_dict=feed_dict)
+        summary, _, val_accuracy = sess.run([merged, cross_entropy, accuracy], feed_dict=feed_dict)
         val_writer.add_summary(summary, iter_ind)
-        # print(sess.run(accuracy, feed_dict=feed_dict))
-        # print(sess.run(accuracy, feed_dict={x: val_x.reshape(val_x.shape[0], -1),
-        #                                     y_: val_t}))
+        print("step %d, training accuracy %g, validation accuracy %g" % (iter_ind, train_accuracy, val_accuracy))
+    if iter_ind % 2000 == 0:
+        save_path = saver.save(sess, os.path.join("./saves/", model_name + '%d.ckpt' % iter_ind))
