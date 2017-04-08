@@ -1,6 +1,12 @@
 import numpy as np
 
-
+def shuffle_2_array(x,y):
+    randomize = np.arange(len(x))
+    np.random.shuffle(randomize)
+    x = x[randomize]
+    y = y[randomize]
+    return x, y
+            
 
 
 def create_circle(radius):

@@ -15,7 +15,10 @@ data_config:
     t_negative: 1 ## t_negative seconds away from annotation, in seconds
 
 extractor_config:
+    version: 2
     #augmentation (turned off when validating)
+    tfa_jitter_radius: 20 
+    tfr: 30
     d0flip: True
     d1flip: True
     jitter: [3, 3]

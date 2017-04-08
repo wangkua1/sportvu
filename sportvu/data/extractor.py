@@ -104,9 +104,19 @@ class BaseExtractor:
                 cxy = cxy[:, :, ::-1]
             return cxy
 
-    def extract_batch(self, events_arr):
-        sequences = np.array([make_3teams_11players(
-            self.extract_raw(e)) for e in events_arr])
+    def extract_batch(self, events_arr, input_is_sequence = False):
+        if input_is_sequence:
+            sequences = events_arr
+        else:
+            sequences = np.array([make_3teams_11players(
+                self.extract_raw(e)) for e in events_arr])
+        ## time jitter ..
+        if 'version' in self.config and self.config['version'] >= 2:
+            t_jit = np.min([self.config['tfa_jitter_radius'], sequences.shape[2]/2 - self.config['tfr']])
+            t_jit = (2 * t_jit * np.random.rand()).round().astype('int32') - t_jit
+            tfa = int(sequences.shape[2]/2 + t_jit)
+            sequences = sequences[:,:, tfa - self.config['tfr']:tfa + self.config['tfr']]
+
         if self.augment and np.sum(self.config['jitter']) > 0:
             d0_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][0]
             d1_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][1]
