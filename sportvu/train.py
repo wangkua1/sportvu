@@ -49,6 +49,8 @@ f_model_config = arguments['<f_model_config>']
 data_config = yaml.load(open(f_data_config, 'rb'))
 model_config = yaml.load(open(f_model_config, 'rb'))
 model_name = os.path.basename(f_model_config).split('.')[0]
+data_name = os.path.basename(f_data_config).split('.')[0]
+exp_name = '%s-X-%s'%(model_name, data_name)
 # Initialize dataset/loader
 dataset = BaseDataset(f_data_config, int(arguments['<fold_index>']), load_raw=False)
 extractor = BaseExtractor(f_data_config)
@@ -111,7 +113,7 @@ tf.summary.histogram('label_distribution', y_)
 tf.summary.histogram('logits', net.logits)
 
 merged = tf.summary.merge_all()
-log_folder = os.path.join('./logs', model_name)
+log_folder = os.path.join('./logs', exp_name)
 
 saver = tf.train.Saver()
 sess = tf.InteractiveSession()
@@ -154,4 +156,4 @@ for iter_ind in tqdm(range(20000)):
         val_writer.add_summary(summary, iter_ind)
         print("step %d, training accuracy %g, validation accuracy %g" % (iter_ind, train_accuracy, val_accuracy))
     if iter_ind % 2000 == 0:
-        save_path = saver.save(sess, os.path.join("./saves/", model_name + '%d.ckpt' % iter_ind))
+        save_path = saver.save(sess, os.path.join("./saves/", exp_name + '%d.ckpt' % iter_ind))

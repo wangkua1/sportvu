@@ -5,6 +5,8 @@
 
 # tensorboard files
 events.out*
+# tensorflow checkpoint
+*.ckpt.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

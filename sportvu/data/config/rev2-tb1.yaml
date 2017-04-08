@@ -1,0 +1,29 @@
+#bmf stands for Ball-Mid-Frame
+node1: &randseed 1
+randseed: *randseed
+
+preproc_dir: rev2
+no_extract: True ####
+n_negative_examples: 2000
+### Dataset Configuration
+data_config: 
+    shuffle: True
+    N_folds: 5
+    game_ids: ['0021500357', '0021500278', '0021500150']
+    annotation: 'data/pnr-annotations/gt/rev0.pkl'
+    tfr: 50
+    t_jitter: 0 ## in the scale of gameclock, which is seconds
+    t_negative: 1 ## t_negative seconds away from annotation, in seconds
+batch_size: 32
+extractor_config:
+    version: 2
+    #augmentation (turned off when validating)
+    tfa_jitter_radius: 20 
+    tfr: 30
+    d0flip: True
+    d1flip: True
+    jitter: [1, 1]
+    #parametrization
+    video: False
+    crop: 'tb' #{'bmf', 'tb'} #bmf=Ball-Mid-Frame, tb=Track-Ball
+    crop_size: [11,11] # in units of ft
