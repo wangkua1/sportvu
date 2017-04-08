@@ -30,7 +30,7 @@ from sportvu.model.convnet3d import ConvNet3d
 # data
 from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import BaseExtractor
-from sportvu.data.loader import PreprocessedLoader, EventLoader
+from sportvu.data.loader import PreprocessedLoader, EventLoader, SequenceLoader
 # concurrent
 from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
 from tqdm import tqdm
@@ -51,7 +51,10 @@ model_name = os.path.basename(f_model_config).split('.')[0]
 # Initialize dataset/loader
 dataset = BaseDataset(f_data_config, int(arguments['<fold_index>']), load_raw=False)
 extractor = BaseExtractor(f_data_config)
-if 'no_extract' in data_config and data_config['no_extract']:
+if ('version' in data_config['extractor_config'] 
+    and data_config['extractor_config']['version'] >= 2):
+    loader = SequenceLoader(dataset, extractor, data_config['batch_size'], fraction_positive=0.5)
+elif 'no_extract' in data_config and data_config['no_extract']:
 	loader = EventLoader(dataset, extractor, None, fraction_positive=0.5)
 else:
 	loader = PreprocessedLoader(dataset, extractor, None, fraction_positive=0.5)
@@ -94,7 +97,7 @@ if not os.path.exists('./logs'):
     os.mkdir('./logs')
 tf.summary.scalar('cross_entropy', cross_entropy)
 tf.summary.scalar('accuray', accuracy)
-tf.summary.image('input', net.x, max_outputs = 4)
+# tf.summary.image('input', net.x, max_outputs = 4)
 tf.summary.histogram('label_distribution', y_)
 tf.summary.histogram('logits', net.logits)
 

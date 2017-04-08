@@ -27,4 +27,4 @@ extractor_config:
     Y_RANGE: 100 # constant (unless not using full court)
     X_RANGE: 50
     radius: 0 # not used
-    video: False
+    video: True
