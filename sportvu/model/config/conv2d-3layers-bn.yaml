@@ -1,0 +1,9 @@
+class_name: ConvNet2d
+### Dataset Configuration
+model_config: 
+    d1: 100
+    d2: 50
+    conv_layers: [[5, 5, 3, 32], [5, 5, 32, 64], [5,5,64,64]]
+    fc_layers: [512, 2]
+    keep_prob: 1
+    bn: True

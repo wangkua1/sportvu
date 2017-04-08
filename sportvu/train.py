@@ -141,16 +141,16 @@ for iter_ind in tqdm(range(20000)):
         batch_xs = np.rollaxis(batch_xs, 1, 5)
     else:
         raise Exception('input format not specified')
-    feed_dict = net.input(batch_xs)
+    feed_dict = net.input(batch_xs, None, True)
     feed_dict[y_] = batch_ys
     summary, _ = sess.run([merged, train_step], feed_dict=feed_dict)
     train_writer.add_summary(summary, iter_ind)
     if iter_ind % 100 == 0:
-        feed_dict = net.input(batch_xs, 1)
+        feed_dict = net.input(batch_xs, 1, False)
         feed_dict[y_] = batch_ys    
         train_accuracy = accuracy.eval(feed_dict=feed_dict)
         # validate trained model
-        feed_dict = net.input(val_x, 1)
+        feed_dict = net.input(val_x, 1, False)
         feed_dict[y_] = val_t    
         summary, _, val_accuracy = sess.run([merged, cross_entropy, accuracy], feed_dict=feed_dict)
         val_writer.add_summary(summary, iter_ind)

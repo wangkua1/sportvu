@@ -24,10 +24,6 @@ extractor_config:
     d1flip: True
     jitter: [1, 1]
     #parametrization
-    sample_rate: 1 #spatial downsample
-    Y_RANGE: 100 # constant (unless not using full court)
-    X_RANGE: 50
-    radius: 0 # not used
-    video: False
-    crop: 'bmf' #{'bmf', 'tb'} #bmf=Ball-Mid-Frame, tb=Track-Ball
-    crop_size: [11,11] # in units of ft
+    video: True
+    crop: 'tb' #{'bmf', 'tb'} #bmf=Ball-Mid-Frame, tb=Track-Ball
+    crop_size: [25,25] # in units of ft

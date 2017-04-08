@@ -1,3 +1,5 @@
-model_checkpoint_path: "conv2d-2layers-25x25-X-rev2-bmf1-25x252000.ckpt"
-all_model_checkpoint_paths: "conv2d-2layers-25x25-X-rev2-bmf1-25x250.ckpt"
-all_model_checkpoint_paths: "conv2d-2layers-25x25-X-rev2-bmf1-25x252000.ckpt"
+model_checkpoint_path: "conv3d-25x25-X-rev2-vid-bmf1-25x256000.ckpt"
+all_model_checkpoint_paths: "conv3d-25x25-X-rev2-vid-bmf1-25x250.ckpt"
+all_model_checkpoint_paths: "conv3d-25x25-X-rev2-vid-bmf1-25x252000.ckpt"
+all_model_checkpoint_paths: "conv3d-25x25-X-rev2-vid-bmf1-25x254000.ckpt"
+all_model_checkpoint_paths: "conv3d-25x25-X-rev2-vid-bmf1-25x256000.ckpt"

@@ -26,4 +26,4 @@ extractor_config:
     #parametrization
     video: False
     crop: 'tb' #{'bmf', 'tb'} #bmf=Ball-Mid-Frame, tb=Track-Ball
-    crop_size: [11,11] # in units of ft
+    crop_size: [25,25] # in units of ft

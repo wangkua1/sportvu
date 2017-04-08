@@ -17,6 +17,12 @@ class ConvNet3d:
         self.fc_layers = config['fc_layers']
         self.value_keep_prob = config['keep_prob']
         self.t_downsample = config['t_downsample']
+        if 'bn' in config:## later version
+            self.bn = config['bn']
+            if self.bn:
+                self.training = tf.placeholder(tf.bool)
+        else:
+            self.bn = False
     # convnet
 
     def build(self):
@@ -54,6 +60,8 @@ class ConvNet3d:
             h_conv = tf.nn.relu(
                 conv3d(h_pool_drop, W_conv[layer_ind]) + b_conv[layer_ind])
             h_pool = max_pool3d_2x2x2(h_conv)
+            if self.bn:
+                h_pool = bn(h_pool, self.training)
             h_pool_drop = tf.nn.dropout(h_pool, keep_prob)
         # fc
         h_pool_flat = tf.reshape(h_pool_drop, [-1, SHAPE_convlast])
@@ -61,6 +69,8 @@ class ConvNet3d:
         for layer_ind in xrange(len(self.fc_layers) - 2):
             h_fc = tf.nn.relu(tf.matmul(h_pool_flat, W_fc[
                               layer_ind]) + b_fc[layer_ind])
+            if self.bn:
+                h_fc = bn(h_fc, self.training)
             h_fc_drop = tf.nn.dropout(h_fc, keep_prob)
 
         y = tf.matmul(h_fc_drop, W_fc[-1]) + b_fc[-1]
@@ -69,14 +79,15 @@ class ConvNet3d:
         self.keep_prob = keep_prob
         self.logits = y
 
-    def input(self, x, keep_prob=None):
+    def input(self, x, keep_prob=None, training=False):
         if keep_prob == None: #default, 'training'
-            return {self.x: x,
-                    self.keep_prob: self.value_keep_prob}
-        else:
-            return {self.x: x,
-                    self.keep_prob: keep_prob}
-
+            keep_prob = self.value_keep_prob
+        ret_dict = {}
+        ret_dict[self.x] = x
+        ret_dict[self.keep_prob] = keep_prob
+        if self.bn:
+            ret_dict[self.training] = training
+        return ret_dict
 
     def output(self):
         return self.logits
