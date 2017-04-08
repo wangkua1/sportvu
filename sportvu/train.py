@@ -97,7 +97,12 @@ if not os.path.exists('./logs'):
     os.mkdir('./logs')
 tf.summary.scalar('cross_entropy', cross_entropy)
 tf.summary.scalar('accuray', accuracy)
-# tf.summary.image('input', net.x, max_outputs = 4)
+if model_config['class_name'] == 'ConvNet2d':
+    tf.summary.image('input', net.x, max_outputs = 4)
+elif model_config['class_name'] == 'ConvNet3d':
+    tf.summary.image('input', tf.reduce_sum(net.x, 1), max_outputs = 4)
+else:
+    raise Exception('input format not specified')
 tf.summary.histogram('label_distribution', y_)
 tf.summary.histogram('logits', net.logits)
 
