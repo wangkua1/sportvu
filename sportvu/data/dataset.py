@@ -6,7 +6,8 @@ from sportvu import data
 import numpy as np
 game_dir = data.constant.game_dir
 
-
+def _hash(i):
+    return int(i['gameid']) + 1000 * i['eid']
 def disentangle_train_val(train, val):
     """
     Given annotations of train/val splits, make sure no overlapping Event
@@ -14,8 +15,6 @@ def disentangle_train_val(train, val):
     """
     # simple hash := gameid + 1000*eid
     assert(np.max([i['eid'] for i in train] + [i['eid'] for i in val]) < 1000)
-    def _hash(i):
-        return int(i['gameid']) + 1000 * i['eid']
     new_train = []
     new_val = []
     while len(val) > 0:
@@ -77,6 +76,14 @@ class BaseDataset:
                 self.games[raw_data['gameid']] = raw_data
         self.val_ind = 0
         self.train_ind = 0
+        ## loader use this for detection task
+        self.val_hash = {}
+        for va in self.val_annotations:
+            k = _hash(va)
+            if k not in self.val_hash:
+                self.val_hash[k] = []
+            self.val_hash[k].append(va)
+
 
     def _make_annotation_dict(self):
         self.annotation_dict = {}

@@ -18,6 +18,7 @@ class BaseLoader:
         self.batch_size = batch_size
         self.fraction_positive = fraction_positive
         self.mode = mode
+        self.valid_event_index = 0
 
     def next(self):
         """
@@ -125,10 +126,43 @@ class BaseLoader:
         return (np.array(ret_val),
                 np.array(ret_labels)
                 )
+
     def load_train(self, extract, positive_only):
         return self.load_split(split='train', extract=extract, positive_only=positive_only)
-    def load_valid(self, extract=True,positive_only=False):
+
+    def load_valid(self, extract=True, positive_only=False):
         return self.load_split(split='val', extract=extract, positive_only=positive_only)
+
+    def load_valid_event(self, extract, every_K_frame=4):
+        if self.valid_event_index == len(self.dataset.val_hash):
+            self.valid_event_index = 0
+            return None
+        vh = self.dataset.val_hash.values()[self.valid_event_index]
+        ret_val = []
+        ret_labels = [i['gameclock'] for i in vh]
+        self.extractor.augment = False
+        e = Event(self.dataset.games[vh[0]['gameid']]['events'][
+                          vh[0]['eid']], gameid=vh[0]['gameid'])
+        N_moments = len(e.moments)
+        for i in xrange(0, N_moments,every_K_frame):
+            try:
+                e = Event(self.dataset.games[vh[0]['gameid']]['events'][
+                          vh[0]['eid']], gameid=vh[0]['gameid'])
+                e.sequence_around_t(
+                    e.moments[i].game_clock, self.dataset.tfr)  # EventException
+                # just to make sure event not malformed (like
+                # missing player)
+                _ = self.extractor.extract_raw(e)
+                ret_val.append(e)
+            except EventException as exc:
+                continue
+            except ExtractorException as exc:
+                continue
+        self.extractor.augment = True
+        self.valid_event_index += 1
+        if extract:
+            ret_val = self.extractor.extract_batch(ret_val)
+        return ret_val, ret_labels
 
     def reset(self):
         pass
@@ -233,6 +267,7 @@ class EventLoader:
     def reset(self):
         self.batch_index = 0
 
+
 class SequenceLoader:
     def __init__(self, dataset, extractor, batch_size, mode='sample', fraction_positive=.5):
         """ 
@@ -256,6 +291,7 @@ class SequenceLoader:
         self.neg_ind = 0
         self.N_pos = int(batch_size * fraction_positive)
         self.N_neg = batch_size - self.N_pos
+
     def next(self):
         """
         """
@@ -275,17 +311,17 @@ class SequenceLoader:
         if self.neg_ind + self.N_neg >= self.neg_x.shape[0]:
             self.neg_ind = 0
             self.neg_x, self.neg_t = shuffle_2_array(self.neg_x, self.neg_t)
-        
+
         s = list(self.pos_x.shape)
         s[0] = self.batch_size
         x = np.zeros(s)
-        x[:self.N_pos] = self.pos_x[self.pos_ind:self.pos_ind+self.N_pos]
-        x[self.N_pos:] = self.neg_x[self.neg_ind:self.neg_ind+self.N_neg]
+        x[:self.N_pos] = self.pos_x[self.pos_ind:self.pos_ind + self.N_pos]
+        x[self.N_pos:] = self.neg_x[self.neg_ind:self.neg_ind + self.N_neg]
         t = np.zeros((self.batch_size, 2))
-        t[:self.N_pos] = self.pos_t[self.pos_ind:self.pos_ind+self.N_pos]
-        t[self.N_pos:] = self.neg_t[self.neg_ind:self.neg_ind+self.N_neg]
+        t[:self.N_pos] = self.pos_t[self.pos_ind:self.pos_ind + self.N_pos]
+        t[self.N_pos:] = self.neg_t[self.neg_ind:self.neg_ind + self.N_neg]
         if extract:
-            x = self.extractor.extract_batch(x,input_is_sequence=True)
+            x = self.extractor.extract_batch(x, input_is_sequence=True)
         self.pos_ind += self.N_pos
         self.neg_ind += self.N_neg
         return x, t
@@ -293,7 +329,7 @@ class SequenceLoader:
     def load_valid(self, extract=True):
         x = self.val_x
         if extract:
-            x = self.extractor.extract_batch(x,input_is_sequence=True)
+            x = self.extractor.extract_batch(x, input_is_sequence=True)
         t = self.val_t
         return x, t
 
