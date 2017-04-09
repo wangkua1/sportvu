@@ -140,6 +140,7 @@ class BaseLoader:
         vh = self.dataset.val_hash.values()[self.valid_event_index]
         ret_val = []
         ret_labels = [i['gameclock'] for i in vh]
+        ret_gameclocks = []
         self.extractor.augment = False
         e = Event(self.dataset.games[vh[0]['gameid']]['events'][
                           vh[0]['eid']], gameid=vh[0]['gameid'])
@@ -148,21 +149,23 @@ class BaseLoader:
             try:
                 e = Event(self.dataset.games[vh[0]['gameid']]['events'][
                           vh[0]['eid']], gameid=vh[0]['gameid'])
+                game_clock = e.moments[i].game_clock
                 e.sequence_around_t(
-                    e.moments[i].game_clock, self.dataset.tfr)  # EventException
+                    game_clock, self.dataset.tfr)  # EventException
                 # just to make sure event not malformed (like
                 # missing player)
                 _ = self.extractor.extract_raw(e)
                 ret_val.append(e)
+                ret_gameclocks.append(game_clock)
             except EventException as exc:
                 continue
             except ExtractorException as exc:
                 continue
-        self.extractor.augment = True
-        self.valid_event_index += 1
         if extract:
             ret_val = self.extractor.extract_batch(ret_val)
-        return ret_val, ret_labels
+        self.extractor.augment = True
+        self.valid_event_index += 1
+        return ret_val, ret_labels, ret_gameclocks
 
     def reset(self):
         pass

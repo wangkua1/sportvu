@@ -2,6 +2,7 @@
 
 Usage:
     train.py <fold_index> <f_data_config> <f_model_config>
+    train.py --test <fold_index> <f_data_config> <f_model_config>
 
 Arguments:
     <f_data_config>  example ''data/config/train_rev0.yaml''
@@ -95,6 +96,19 @@ correct_prediction = tf.equal(tf.argmax(net.output(), 1), tf.argmax(y_, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
 
+## testing
+if arguments['--test']:
+    saver = tf.train.Saver()
+    sess = tf.InteractiveSession()
+    ckpt_path = os.path.join("./saves/", exp_name + '.best')
+    saver.restore(sess, ckpt_path)
+
+    feed_dict = net.input(val_x, 1, False)
+    feed_dict[y_] = val_t    
+    ce, val_accuracy = sess.run([cross_entropy, accuracy], feed_dict=feed_dict)
+    print ('Best Validation CE: %f, Acc: %f'%(ce, val_accuracy))
+    sys.exit(0)
+
 # checkpoints 
 if not os.path.exists('./saves'):
     os.mkdir('./saves')
@@ -127,6 +141,7 @@ train_writer = tf.summary.FileWriter(os.path.join(log_folder, 'train'), sess.gra
 val_writer = tf.summary.FileWriter(os.path.join(log_folder, 'val'), sess.graph)
 tf.global_variables_initializer().run()
 # Train
+best_val_acc = 0
 for iter_ind in tqdm(range(20000)):
     # if iter_ind ==0:
     loaded = cloader.next()
@@ -155,5 +170,8 @@ for iter_ind in tqdm(range(20000)):
         summary, _, val_accuracy = sess.run([merged, cross_entropy, accuracy], feed_dict=feed_dict)
         val_writer.add_summary(summary, iter_ind)
         print("step %d, training accuracy %g, validation accuracy %g" % (iter_ind, train_accuracy, val_accuracy))
+        if  best_val_acc>val_accuracy:
+            save_path = saver.save(sess, os.path.join("./saves/", exp_name + '.best'))    
+            best_val_acc = val_accuracy
     if iter_ind % 2000 == 0:
         save_path = saver.save(sess, os.path.join("./saves/", exp_name + '%d.ckpt' % iter_ind))
