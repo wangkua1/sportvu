@@ -10,20 +10,20 @@ from tqdm import tqdm
 from sportvu.data.utils import make_3teams_11players, pictorialize_fast, make_reference
 
 
-f_data_config = '../sportvu/data/config/rev2-tb1.yaml'
+f_data_config = '../sportvu/data/config/rev2.yaml'
 fold_index = 0
 dataset = BaseDataset(f_data_config, fold_index=fold_index, load_raw=False)
 extractor = BaseExtractor(f_data_config)
 loader = SequenceLoader(dataset, extractor, 32, fraction_positive=.5)
 
-x, t = loader.next_batch(False)
+# x, t = loader.next_batch(False)
 
 
 
-crop_size = [11, 11]
-reference = make_reference(x, crop_size,'tb')
-x = pictorialize_fast(x - reference, 1, crop_size[0]+2, crop_size[1]+2)
-x = x[:,:,:,1:-1,1:-1]
+# crop_size = [11, 11]
+# reference = make_reference(x, crop_size,'tb')
+# x = pictorialize_fast(x - reference, 1, crop_size[0]+2, crop_size[1]+2)
+# x = x[:,:,:,1:-1,1:-1]
 
 
 # batch = loader.next_batch(False)

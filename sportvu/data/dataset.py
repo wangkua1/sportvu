@@ -7,13 +7,43 @@ import numpy as np
 game_dir = data.constant.game_dir
 
 
+def disentangle_train_val(train, val):
+    """
+    Given annotations of train/val splits, make sure no overlapping Event
+    -> for later detection testing
+    """
+    # simple hash := gameid + 1000*eid
+    assert(np.max([i['eid'] for i in train] + [i['eid'] for i in val]) < 1000)
+    def _hash(i):
+        return int(i['gameid']) + 1000 * i['eid']
+    new_train = []
+    new_val = []
+    while len(val) > 0:
+        ve = val.pop()
+        vh = _hash(ve)
+        if vh in [_hash(i) for i in train] + [_hash(i) for i in new_train]:
+            new_train.append(ve)
+            # to balance, find a unique train_anno to put in val
+            while True:
+                te = train.pop(0)
+                if _hash(te) in [_hash(i) for i in train]:  # not unique, put back
+                    train.append(te)
+                else:
+                    new_val.append(te)
+                    break
+        else:
+            new_val.append(ve)
+    new_train += train
+    return new_train, new_val
+
+
 class BaseDataset:
     """base class for loading the dataset
     """
 
     def __init__(self, f_config, fold_index, load_raw=True):
         # configuration
-        self.fold_index = fold_index    
+        self.fold_index = fold_index
         self.config = yaml.load(open(f_config, 'rb'))
         assert (fold_index >= 0 and fold_index <
                 self.config['data_config']['N_folds'])
@@ -30,14 +60,16 @@ class BaseDataset:
         self.val_annotations = self.annotations[val_start:val_end]
         self.train_annotations = self.annotations[
             :val_start] + self.annotations[val_end:]
-
+        # make sure no overlapping Event between train and val
+        self.train_annotations, self.val_annotations = disentangle_train_val(
+            self.train_annotations, self.val_annotations)
         self._make_annotation_dict()
         self.tfr = self.config['data_config']['tfr']
         self.t_jitter = self.config['data_config']['t_jitter']
         self.t_negative = self.config['data_config']['t_negative']
         self.game_ids = self.config['data_config']['game_ids']
         ###
-        if load_raw==True:
+        if load_raw == True:
             self.games = {}
             for gameid in self.game_ids:
                 with open(os.path.join(game_dir, gameid + '.pkl'), 'rb') as f:
@@ -60,49 +92,51 @@ class BaseDataset:
                 game[quarter_ind] = np.sort(game[quarter_ind])[::-1]
 
     def propose_positive_Ta(self, jitter=True, train=True, loop=False):
-        if not loop: #sampling from training annotations
+        if not loop:  # sampling from training annotations
             while True:
                 r_ind = np.random.randint(0, len(self.train_annotations))
                 if not jitter:
-                    ret =  self.train_annotations[r_ind]
+                    ret = self.train_annotations[r_ind]
                 else:
                     anno = self.train_annotations[r_ind].copy()
                     anno['gameclock'] += np.random.rand() * self.t_jitter
                     ret = anno
-                ## Hacky (human labellers has some delay, so usually they label a bit after a pnr)
-                ## here we adjust for it...the way I selected this was just by visualizing labels
-                ret['gameclock'] += .6 ## + means earlier in gameclock
+                # Hacky (human labellers has some delay, so usually they label a bit after a pnr)
+                # here we adjust for it...the way I selected this was just by
+                # visualizing labels
+                ret['gameclock'] += .6  # + means earlier in gameclock
 
-                # check not too close to boundary (i.e. not enough frames to make a sequence)
+                # check not too close to boundary (i.e. not enough frames to
+                # make a sequence)
                 e = self.games[anno['gameid']]['events'][ret['eid']]
                 for idx, moment in enumerate(e['moments']):
-                    #seek
+                    # seek
                     if moment[2] < ret['gameclock']:
                         if idx + self.tfr <= len(e['moments']) and idx - self.tfr >= 0:
                             return ret
                         else:
-                            break # try again...
+                            break  # try again...
 
         else:
             if train:
-                if self.train_ind == len(self.train_annotations): #end, reset
+                if self.train_ind == len(self.train_annotations):  # end, reset
                     self.train_ind = 0
                     return None
                 else:
-                    ret =  self.train_annotations[self.train_ind]
+                    ret = self.train_annotations[self.train_ind]
                     self.train_ind += 1
                     return ret
             else:
-                if self.val_ind == len(self.val_annotations): #end, reset
+                if self.val_ind == len(self.val_annotations):  # end, reset
                     self.val_ind = 0
                     return None
                 else:
-                    ret =  self.val_annotations[self.val_ind]
+                    ret = self.val_annotations[self.val_ind]
                     self.val_ind += 1
                     return ret
 
-    def _make_annotation(self, gameid, quarter, gameclock,eid):
-        return {'gameid': str(gameid), 'quarter': int(quarter), 
+    def _make_annotation(self, gameid, quarter, gameclock, eid):
+        return {'gameid': str(gameid), 'quarter': int(quarter),
                 'gameclock': float(gameclock), 'eid': int(eid)}
 
     def propose_Ta(self):
@@ -134,7 +168,7 @@ class BaseDataset:
     #     N_pos = np.round(N * fraction_positive)
     #     N_neg = N - N_pos
     #     for t_ind in xrange(N_pos):
-    #         pass            
+    #         pass
 
 
 if __name__ == '__main__':
