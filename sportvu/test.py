@@ -36,6 +36,7 @@ from docopt import docopt
 import yaml
 import gc
 import matplotlib.pylab as plt
+import cPickle as pkl
 arguments = docopt(__doc__)
 print ("...Docopt... ")
 print(arguments)
@@ -80,7 +81,7 @@ if not os.path.exists(plot_folder):
 saver = tf.train.Saver()
 sess = tf.InteractiveSession()
 
-ckpt_path = os.path.join("./saves/", exp_name + '.best')
+ckpt_path = os.path.join("./saves/", exp_name + '.ckpt.best')
 # ckpt_path = os.path.join("./saves/", exp_name + '10000.ckpt')
 saver.restore(sess, ckpt_path)
 
@@ -88,6 +89,7 @@ every_K_frame = int(arguments['<every_K_frame>'])
 plt.figure()
 ind = 0
 while True:
+    print (ind)
     loaded = cloader.load_valid_event(True, every_K_frame)
     if loaded is not None:
         batch_xs, labels, gameclocks = loaded
@@ -103,9 +105,12 @@ while True:
     feed_dict = net.input(batch_xs, None, True)
     probs = sess.run(tf.nn.softmax(net.output()), feed_dict=feed_dict)
 
-    plt.plot(gameclocks, probs[:,1], '-')
+    plt.plot(gameclocks, probs[:, 1], '-')
     plt.plot(np.array(labels), np.ones((len(labels))), '.')
 
-    plt.savefig(os.path.join(plot_folder, '%i.png'%ind))
+    plt.savefig(os.path.join(plot_folder, '%i.png' % ind))
     plt.clf()
-    ind +=1
+    # save the raw predictions
+    pkl.dump([gameclocks, probs[:, 1], labels], open(
+        os.path.join(plot_folder, '%i.pkl' % ind), 'w'))
+    ind += 1

@@ -2,7 +2,7 @@
 *.pdf
 *.png
 *.ipynb
-
+*.pkl
 # tensorboard files
 events.out*
 # tensorflow checkpoint

@@ -100,7 +100,7 @@ accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 if arguments['--test']:
     saver = tf.train.Saver()
     sess = tf.InteractiveSession()
-    ckpt_path = os.path.join("./saves/", exp_name + '.best')
+    ckpt_path = os.path.join("./saves/", exp_name + '.ckpt.best')
     saver.restore(sess, ckpt_path)
 
     feed_dict = net.input(val_x, 1, False)
@@ -170,8 +170,10 @@ for iter_ind in tqdm(range(20000)):
         summary, _, val_accuracy = sess.run([merged, cross_entropy, accuracy], feed_dict=feed_dict)
         val_writer.add_summary(summary, iter_ind)
         print("step %d, training accuracy %g, validation accuracy %g" % (iter_ind, train_accuracy, val_accuracy))
-        if  best_val_acc>val_accuracy:
-            save_path = saver.save(sess, os.path.join("./saves/", exp_name + '.best'))    
+        if val_accuracy > best_val_acc:
+            p = os.path.join("./saves/", exp_name + '.ckpt.best')
+            print ('Saving Best Model to: %s'%p)
+            save_path = saver.save(sess, p)    
             best_val_acc = val_accuracy
     if iter_ind % 2000 == 0:
         save_path = saver.save(sess, os.path.join("./saves/", exp_name + '%d.ckpt' % iter_ind))
