@@ -22,7 +22,8 @@ import matplotlib.pylab as plt
 import cPickle as pkl
 ##
 from sportvu.detect.running_window_p import RunWindowP
-from utils import smooth_1D_array
+from sportvu.detect.nms import NMS
+from sportvu.detect.utils import smooth_1D_array
 arguments = docopt(__doc__)
 print ("...Docopt... ")
 print(arguments)
@@ -39,7 +40,7 @@ data_name = os.path.basename(f_data_config).split('.')[0]
 exp_name = '%s-X-%s' % (model_name, data_name)
 detect_config = yaml.load(open(f_detect_config, 'rb'))
 
-detector = RunWindowP(detect_config)
+detector = eval(detect_config['class'])(detect_config)
 
 
 plot_folder = os.path.join('./plots', exp_name)
@@ -51,12 +52,14 @@ plt.figure()
 all_pred_f = filter(lambda s:'.pkl' in s,os.listdir(plot_folder))
 for ind, f in tqdm(enumerate(all_pred_f)):
     gameclocks, pnr_probs, labels = pkl.load(open(os.path.join(plot_folder,'%i.pkl'%(ind)), 'rb'))
-    cands = detector.detect(pnr_probs, gameclocks)
+    cands, mp = detector.detect(pnr_probs, gameclocks, True)
     print (cands)
     plt.plot(gameclocks, pnr_probs, '-')
+    if mp is not None:
+        plt.plot(gameclocks, mp, '-')
     plt.plot(np.array(labels), np.ones((len(labels))), '.')
     for cand in cands:
         cand_x = np.arange(cand[1], cand[0], .1)
         plt.plot(cand_x, np.ones((len(cand_x))) * .95, '-' )
-    plt.savefig(os.path.join(plot_folder, '%s-%i.png' %(detect_config['detect_config']['type'], ind)))
+    plt.savefig(os.path.join(plot_folder, '%s-%i.png' %(detect_config['class'], ind)))
     plt.clf()

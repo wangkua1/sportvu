@@ -22,7 +22,7 @@ import matplotlib.pylab as plt
 import cPickle as pkl
 ##
 from sportvu.detect.running_window_p import RunWindowP
-from utils import smooth_1D_array
+from sportvu.detect.nms import NMS
 arguments = docopt(__doc__)
 print ("...Docopt... ")
 print(arguments)
@@ -39,7 +39,7 @@ data_name = os.path.basename(f_data_config).split('.')[0]
 exp_name = '%s-X-%s' % (model_name, data_name)
 detect_config = yaml.load(open(f_detect_config, 'rb'))
 
-detector = RunWindowP(detect_config)
+detector = eval(detect_config['class'])(detect_config)
 
 
 plot_folder = os.path.join('./plots', exp_name)
@@ -70,27 +70,38 @@ def PR(all_pred_f, detector):
         relevant += len(labels)
         retrieved += len(cands)
     if intersect == 0:
-        return 0,0
+        return 0, 0
     return intersect / retrieved, intersect / relevant
 
 
 plt.figure()
-for count_threshold in xrange(1,detector.config['window_radius']*2,2):
-    detector.config['count_threshold'] = count_threshold
-    ps =[]
-    rs =[]
-    for prob_threshold in tqdm(xrange(0,100,int(arguments['<percent_grid>']))):
-        detector.config['prob_threshold'] = prob_threshold *.01
+
+
+if detect_config['class'] == 'RunWindowP':
+    outer_grid = xrange(1, detector.config['window_radius'] * 2, 2)
+    k = 'count_threshold'
+elif detect_config['class'] == 'NMS':
+    outer_grid = xrange(1, detector.config['window_radius'])
+    k = 'window_radius'
+
+for v in outer_grid:
+    detector.config[k] = v
+    ps = []
+    rs = []
+    for prob_threshold in tqdm(xrange(0, 100,
+                                      int(arguments['<percent_grid>']))):
+        detector.config['prob_threshold'] = prob_threshold * .01
         precision, recall = PR(all_pred_f, detector)
         ps.append(precision)
         rs.append(recall)
-    plt.plot(rs, ps, label='count-thresh:%i'%count_threshold)
+    plt.plot(rs, ps, label='%s:%i' % (k, v))
 
-plt.xlim([0,1])
-plt.ylim([0,1])
+plt.xlim([0, 1])
+plt.ylim([0, 1])
 plt.title('precision-recall')
 plt.xlabel('recall')
 plt.ylabel('precision')
 plt.legend()
-plt.savefig(os.path.join(plot_folder, 'precision-recall.png'))
+plt.savefig(os.path.join(plot_folder, '%s-precision-recall.png' %
+                         detect_config['class']))
 plt.clf()

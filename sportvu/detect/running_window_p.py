@@ -14,7 +14,7 @@ class RunWindowP:
     def __init__(self, config):
         self.config = config['detect_config']
 
-    def detect(self, p, gameclock):
+    def detect(self, p, gameclock, return_modified_p=False):
         cand = []  # [(start_t, end_t)...]
         if self.config['type'] == 'fixed':
             for i in xrange(self.config['window_radius'],
@@ -26,4 +26,7 @@ class RunWindowP:
                     cand.append((gameclock[i - self.config['window_radius']],
                                  gameclock[i + self.config['window_radius']]))
                     curr_window_p *= 0 
-        return cand
+        if not return_modified_p:
+            return cand
+        else:
+            return cand, None
