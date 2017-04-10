@@ -1,5 +1,6 @@
 """detection_from_raw_pred.py
-
+* not super useful, a simple script that plots a) raw pred, b) gt pnr, c) detector output
+at 1 single setting
 Usage:
     detection_from_raw_pred.py <fold_index> <f_data_config> <f_model_config> <f_detect_config>
 

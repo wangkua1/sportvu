@@ -48,6 +48,11 @@ class BaseDataset:
                 self.config['data_config']['N_folds'])
         self.annotations = pickle.load(
             open(data.constant.data_dir + self.config['data_config']['annotation']))
+        # Hacky (human labellers has some delay, so usually they label a bit after a pnr)
+        # here we adjust for it...the way I selected this was just by
+        # visualizing labels
+        for anno in self.annotations:
+            anno['gameclock'] += .6  # + means earlier in gameclock
         if self.config['data_config']['shuffle']:
             np.random.seed(self.config['randseed'])
             np.random.shuffle(self.annotations)
@@ -108,10 +113,7 @@ class BaseDataset:
                     anno = self.train_annotations[r_ind].copy()
                     anno['gameclock'] += np.random.rand() * self.t_jitter
                     ret = anno
-                # Hacky (human labellers has some delay, so usually they label a bit after a pnr)
-                # here we adjust for it...the way I selected this was just by
-                # visualizing labels
-                ret['gameclock'] += .6  # + means earlier in gameclock
+                
 
                 # check not too close to boundary (i.e. not enough frames to
                 # make a sequence)
