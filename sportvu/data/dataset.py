@@ -40,34 +40,42 @@ class BaseDataset:
     """base class for loading the dataset
     """
 
-    def __init__(self, f_config, fold_index, load_raw=True):
+    def __init__(self, f_config, fold_index, load_raw=True, no_anno=False):
         # configuration
         self.fold_index = fold_index
         self.config = yaml.load(open(f_config, 'rb'))
         assert (fold_index >= 0 and fold_index <
                 self.config['data_config']['N_folds'])
-        self.annotations = pickle.load(
-            open(data.constant.data_dir + self.config['data_config']['annotation']))
-        # Hacky (human labellers has some delay, so usually they label a bit after a pnr)
-        # here we adjust for it...the way I selected this was just by
-        # visualizing labels
-        for anno in self.annotations:
-            anno['gameclock'] += .6  # + means earlier in gameclock
-        if self.config['data_config']['shuffle']:
-            np.random.seed(self.config['randseed'])
-            np.random.shuffle(self.annotations)
-        N = len(self.annotations)
-        val_start = np.round(
-            fold_index / self.config['data_config']['N_folds'] * N).astype('int32')
-        val_end = np.round((fold_index + 1) /
-                           self.config['data_config']['N_folds'] * N).astype('int32')
-        self.val_annotations = self.annotations[val_start:val_end]
-        self.train_annotations = self.annotations[
-            :val_start] + self.annotations[val_end:]
-        # make sure no overlapping Event between train and val
-        self.train_annotations, self.val_annotations = disentangle_train_val(
-            self.train_annotations, self.val_annotations)
-        self._make_annotation_dict()
+        if not no_anno:
+            self.annotations = pickle.load(
+                open(data.constant.data_dir + self.config['data_config']['annotation']))
+            # Hacky (human labellers has some delay, so usually they label a bit after a pnr)
+            # here we adjust for it...the way I selected this was just by
+            # visualizing labels
+            for anno in self.annotations:
+                anno['gameclock'] += .6  # + means earlier in gameclock
+            if self.config['data_config']['shuffle']:
+                np.random.seed(self.config['randseed'])
+                np.random.shuffle(self.annotations)
+            N = len(self.annotations)
+            val_start = np.round(
+                fold_index / self.config['data_config']['N_folds'] * N).astype('int32')
+            val_end = np.round((fold_index + 1) /
+                               self.config['data_config']['N_folds'] * N).astype('int32')
+            self.val_annotations = self.annotations[val_start:val_end]
+            self.train_annotations = self.annotations[
+                :val_start] + self.annotations[val_end:]
+            # make sure no overlapping Event between train and val
+            self.train_annotations, self.val_annotations = disentangle_train_val(
+                self.train_annotations, self.val_annotations)
+            self._make_annotation_dict()
+            ## loader use this for detection task
+            self.val_hash = {}
+            for va in self.val_annotations:
+                k = _hash(va)
+                if k not in self.val_hash:
+                    self.val_hash[k] = []
+                self.val_hash[k].append(va)
         self.tfr = self.config['data_config']['tfr']
         self.t_jitter = self.config['data_config']['t_jitter']
         self.t_negative = self.config['data_config']['t_negative']
@@ -81,13 +89,6 @@ class BaseDataset:
                 self.games[raw_data['gameid']] = raw_data
         self.val_ind = 0
         self.train_ind = 0
-        ## loader use this for detection task
-        self.val_hash = {}
-        for va in self.val_annotations:
-            k = _hash(va)
-            if k not in self.val_hash:
-                self.val_hash[k] = []
-            self.val_hash[k].append(va)
 
 
     def _make_annotation_dict(self):

@@ -30,16 +30,19 @@ class BaseLoader:
         else:
             raise Exception('unknown loader mode')
 
-    def next_batch(self, extract=True):
+    def next_batch(self, extract=True, no_anno=False):
         N_pos = int(self.fraction_positive * self.batch_size)
         N_neg = self.batch_size - N_pos
         ret_val = []
-        func = [self.dataset.propose_positive_Ta,
-                self.dataset.propose_negative_Ta]
+        if not no_anno:
+            func = [self.dataset.propose_positive_Ta,
+                    self.dataset.propose_negative_Ta]
+        else:
+            func = [self.dataset.propose_Ta]
         Ns = [N_pos, N_neg]
         # anno = func[0]()
-        for j in xrange(len(Ns)):
-            for i in xrange(Ns[j]):
+        for j in xrange(len(func)):
+            for _ in xrange(Ns[j]):
                 while True:
                     try:
                         anno = func[j]()
