@@ -49,7 +49,7 @@ if not os.path.exists(plot_folder):
 plt.figure()
 all_pred_f = filter(lambda s:'.pkl' in s,os.listdir(plot_folder))
 for ind, f in tqdm(enumerate(all_pred_f)):
-    gameclocks, pnr_probs, labels = pkl.load(open(os.path.join(plot_folder,'%i.pkl'%(ind+1)), 'rb'))
+    gameclocks, pnr_probs, labels = pkl.load(open(os.path.join(plot_folder,'%i.pkl'%(ind)), 'rb'))
     cands = detector.detect(pnr_probs, gameclocks)
     print (cands)
     plt.plot(gameclocks, pnr_probs, '-')
