@@ -1,7 +1,7 @@
 """detection_pr.py
 plot precision-recall, varying prob_threshold
 Usage:
-    detection_from_raw_pred.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> <percent_grid>
+    detection_from_raw_pred.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> <percent_grid> --single
 
 Arguments:
     <percent_grid> e.g. 5, prob_threshold = 0,5,10,15 ...
@@ -74,7 +74,7 @@ def PR(all_pred_f, detector):
     return intersect / retrieved, intersect / relevant
 
 
-plt.figure()
+fig = plt.figure()
 
 
 if detect_config['class'] == 'RunWindowP':
@@ -83,9 +83,7 @@ if detect_config['class'] == 'RunWindowP':
 elif detect_config['class'] == 'NMS':
     outer_grid = xrange(1, detector.config['window_radius'])
     k = 'window_radius'
-
-for v in outer_grid:
-    detector.config[k] = v
+if arguments['--single']:
     ps = []
     rs = []
     for prob_threshold in tqdm(xrange(0, 100,
@@ -94,14 +92,36 @@ for v in outer_grid:
         precision, recall = PR(all_pred_f, detector)
         ps.append(precision)
         rs.append(recall)
-    plt.plot(rs, ps, label='%s:%i' % (k, v))
+    plt.plot(np.arange(0, 1, .01*int(
+        arguments['<percent_grid>'])), ps, label='precision')
+    plt.plot(np.arange(0, 1, .01*int(
+        arguments['<percent_grid>'])), rs, label='recall')
+    plt.xlabel('prob_threshold')
+    plt.ylabel('precision/recall')
+
+else:
+    for v in outer_grid:
+        detector.config[k] = v
+        ps = []
+        rs = []
+        for prob_threshold in tqdm(xrange(0, 100,
+                                          int(arguments['<percent_grid>']))):
+            detector.config['prob_threshold'] = prob_threshold * .01
+            precision, recall = PR(all_pred_f, detector)
+            ps.append(precision)
+            rs.append(recall)
+        plt.plot(rs, ps, label='%s:%i' % (k, v))
+    plt.xlabel('recall')
+    plt.ylabel('precision')
 
 plt.xlim([0, 1])
 plt.ylim([0, 1])
 plt.title('precision-recall')
-plt.xlabel('recall')
-plt.ylabel('precision')
 plt.legend()
+ax = fig.gca()
+ax.set_xticks(np.arange(0, 1, 0.1))
+ax.set_yticks(np.arange(0, 1., 0.1))
+plt.grid()
 plt.savefig(os.path.join(plot_folder, '%s-precision-recall.png' %
                          detect_config['class']))
 plt.clf()

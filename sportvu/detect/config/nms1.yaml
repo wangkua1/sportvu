@@ -1,7 +1,6 @@
 class: NMS
 detect_config:
-    type: 'fixed'
-    window_radius: 8
+    window_radius: 20
     prob_threshold: .8
     instance_radius: 8 # half the length of the final detection proposal
 
