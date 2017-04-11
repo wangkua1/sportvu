@@ -50,12 +50,15 @@ class BaseExtractor:
                 else:  # defense
                     defense[def_id].append([player.x, player.y])
                     def_id += 1
-        if not ((len(np.array(ball).shape) == 3
+        if ( len(ball) == 0 or
+            (not ((len(np.array(ball).shape) == 3
                  and len(np.array(offense).shape) == 3
                  and len(np.array(defense).shape) == 3)
                 and
                 (np.array(ball).shape[1] == np.array(offense).shape[1]
-                 and np.array(offense).shape[1] == np.array(defense).shape[1])):
+                 and np.array(offense).shape[1] == np.array(defense).shape[1]))
+            )
+            ):
             raise ExtractorException()
         return [ball, offense, defense]
 

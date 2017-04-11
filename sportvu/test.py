@@ -1,7 +1,7 @@
 """test.py
 
 Usage:
-    test.py <fold_index> <f_data_config> <f_model_config> <every_K_frame>
+    test.py <fold_index> <f_data_config> <f_model_config> <every_K_frame> --train
 
 Arguments:
     <f_data_config>  example ''data/config/train_rev0.yaml''
@@ -90,9 +90,16 @@ plt.figure()
 ind = 0
 while True:
     print (ind)
-    loaded = cloader.load_valid_event(True, every_K_frame)
+    if arguments['--train']:
+        split = 'train'
+    else:
+        split = 'val'
+    loaded = cloader.load_split_event(split, True, every_K_frame)
     if loaded is not None:
-        batch_xs, labels, gameclocks = loaded
+        if loaded == 0:
+            ind+=1
+            continue
+        batch_xs, labels, gameclocks, meta = loaded
     else:
         print ('Bye')
         sys.exit(0)
@@ -112,5 +119,8 @@ while True:
     plt.clf()
     # save the raw predictions
     pkl.dump([gameclocks, probs[:, 1], labels], open(
-        os.path.join(plot_folder, '%i.pkl' % ind), 'w'))
+        os.path.join(plot_folder, '%s-%i.pkl' %(split, ind)), 'w'))
+    if arguments['--train']:
+        pkl.dump(meta, open(
+            os.path.join(plot_folder, '%s-meta-%i.pkl' %(split, ind)), 'w'))
     ind += 1

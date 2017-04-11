@@ -62,4 +62,6 @@ for ind, f in tqdm(enumerate(all_pred_f)):
         cand_x = np.arange(cand[1], cand[0], .1)
         plt.plot(cand_x, np.ones((len(cand_x))) * .95, '-' )
     plt.savefig(os.path.join(plot_folder, '%s-%i.png' %(detect_config['class'], ind)))
+    plt.xlim([0,1])
+    plt.ylim([0,1])
     plt.clf()

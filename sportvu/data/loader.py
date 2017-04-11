@@ -18,7 +18,7 @@ class BaseLoader:
         self.batch_size = batch_size
         self.fraction_positive = fraction_positive
         self.mode = mode
-        self.valid_event_index = 0
+        self.event_index = 0
 
     def next(self):
         """
@@ -136,13 +136,19 @@ class BaseLoader:
     def load_valid(self, extract=True, positive_only=False):
         return self.load_split(split='val', extract=extract, positive_only=positive_only)
 
-    def load_valid_event(self, extract, every_K_frame=4):
-        if self.valid_event_index == len(self.dataset.val_hash):
-            self.valid_event_index = 0
+    def load_split_event(self, split, extract, every_K_frame=4):
+        if split == 'val':
+            split_hash = self.dataset.val_hash
+        elif split == 'train':
+            split_hash = self.dataset.train_hash
+        else:
+            raise NotImplementedError()
+        if self.event_index == len(split_hash):
+            self.event_index = 0
             return None
-        vh = self.dataset.val_hash.values()[self.valid_event_index]
+        vh = split_hash.values()[self.event_index]
         ret_val = []
-        ret_labels = [i['gameclock'] for i in vh]
+        ret_labels = filter(lambda t:t!=-1, [i['gameclock'] for i in vh])
         ret_gameclocks = []
         self.extractor.augment = False
         e = Event(self.dataset.games[vh[0]['gameid']]['events'][
@@ -164,11 +170,16 @@ class BaseLoader:
                 continue
             except ExtractorException as exc:
                 continue
-        if extract:
-            ret_val = self.extractor.extract_batch(ret_val)
+        if len(ret_val) == 0: # malformed Event
+            ret = 0
+        else:
+            if extract:
+                ret_val = self.extractor.extract_batch(ret_val)
+            meta = [vh[0]['eid'], vh[0]['gameid']]
+            ret = [ret_val, ret_labels, ret_gameclocks, meta]
         self.extractor.augment = True
-        self.valid_event_index += 1
-        return ret_val, ret_labels, ret_gameclocks
+        self.event_index += 1
+        return ret
 
     def reset(self):
         pass

@@ -6,8 +6,11 @@ from sportvu import data
 import numpy as np
 game_dir = data.constant.game_dir
 
+
 def _hash(i):
     return int(i['gameid']) + 1000 * i['eid']
+
+
 def disentangle_train_val(train, val):
     """
     Given annotations of train/val splits, make sure no overlapping Event
@@ -46,36 +49,6 @@ class BaseDataset:
         self.config = yaml.load(open(f_config, 'rb'))
         assert (fold_index >= 0 and fold_index <
                 self.config['data_config']['N_folds'])
-        if not no_anno:
-            self.annotations = pickle.load(
-                open(data.constant.data_dir + self.config['data_config']['annotation']))
-            # Hacky (human labellers has some delay, so usually they label a bit after a pnr)
-            # here we adjust for it...the way I selected this was just by
-            # visualizing labels
-            for anno in self.annotations:
-                anno['gameclock'] += .6  # + means earlier in gameclock
-            if self.config['data_config']['shuffle']:
-                np.random.seed(self.config['randseed'])
-                np.random.shuffle(self.annotations)
-            N = len(self.annotations)
-            val_start = np.round(
-                fold_index / self.config['data_config']['N_folds'] * N).astype('int32')
-            val_end = np.round((fold_index + 1) /
-                               self.config['data_config']['N_folds'] * N).astype('int32')
-            self.val_annotations = self.annotations[val_start:val_end]
-            self.train_annotations = self.annotations[
-                :val_start] + self.annotations[val_end:]
-            # make sure no overlapping Event between train and val
-            self.train_annotations, self.val_annotations = disentangle_train_val(
-                self.train_annotations, self.val_annotations)
-            self._make_annotation_dict()
-            ## loader use this for detection task
-            self.val_hash = {}
-            for va in self.val_annotations:
-                k = _hash(va)
-                if k not in self.val_hash:
-                    self.val_hash[k] = []
-                self.val_hash[k].append(va)
         self.tfr = self.config['data_config']['tfr']
         self.t_jitter = self.config['data_config']['t_jitter']
         self.t_negative = self.config['data_config']['t_negative']
@@ -87,19 +60,81 @@ class BaseDataset:
                 with open(os.path.join(game_dir, gameid + '.pkl'), 'rb') as f:
                     raw_data = pickle.load(f)
                 self.games[raw_data['gameid']] = raw_data
+        if not no_anno:
+            self.annotations = pickle.load(
+                open(data.constant.data_dir + self.config['data_config']['annotation']))
+            # Hacky (human labellers has some delay, so usually they label a bit after a pnr)
+            # here we adjust for it...the way I selected this was just by
+            # visualizing labels
+            for anno in self.annotations:
+                anno['gameclock'] += .6  # + means earlier in gameclock
+            self.train_annotations, self.val_annotations = self._split(
+                                        self.annotations, fold_index)
+            # make sure no overlapping Event between train and val
+            self.train_annotations, self.val_annotations = disentangle_train_val(
+                self.train_annotations, self.val_annotations)
+            self._make_annotation_dict()
+            # annotation only has Events with PNR
+            # need to find Events without PNR, split into train/val
+            #   for negatives examples
+            # Let's call these Events 'void'
+            # use gameclock = -1
+            self.voids = []  
+            for gameid in self.game_ids:
+                curr_game_events = self.games[gameid]['events']
+                for eid, event in enumerate(curr_game_events):
+                    if not eid in self.annotation_dict_eids[gameid][event['quarter']]:
+                        self.voids.append(self._make_annotation(
+                            gameid, event['quarter'], -1, eid))
+            self.train_voids, self.val_voids = self._split(
+                                        self.voids, fold_index)
+
+            # loader use below for detection task
+            # hash validation events
+            self.val_hash = {}
+            for va in self.val_annotations + self.val_voids:
+                k = _hash(va)
+                if k not in self.val_hash:
+                    self.val_hash[k] = []
+                self.val_hash[k].append(va)
+            # hash train events for mining hard examples
+            self.train_hash = {}
+            for va in self.train_annotations + self.train_voids:
+                k = _hash(va)
+                if k not in self.train_hash:
+                    self.train_hash[k] = []
+                self.train_hash[k].append(va)
         self.val_ind = 0
         self.train_ind = 0
 
+    def _split(self, annotations, fold_index):
+        if self.config['data_config']['shuffle']:
+            np.random.seed(self.config['randseed'])
+            np.random.shuffle(annotations)
+        N = len(annotations)
+        val_start = np.round(
+            fold_index / self.config['data_config']['N_folds'] * N).astype('int32')
+        val_end = np.round((fold_index + 1) /
+                           self.config['data_config']['N_folds'] * N).astype('int32')
+        val_annotations = annotations[val_start:val_end]
+        train_annotations = annotations[
+            :val_start] + annotations[val_end:]
+        return train_annotations, val_annotations
 
     def _make_annotation_dict(self):
         self.annotation_dict = {}
+        self.annotation_dict_eids = {}
         for anno in self.annotations:
             if anno['gameid'] not in self.annotation_dict:
                 self.annotation_dict[anno['gameid']] = {}
+                self.annotation_dict_eids[anno['gameid']] = {}
             if anno['quarter'] not in self.annotation_dict[anno['gameid']]:
                 self.annotation_dict[anno['gameid']][anno['quarter']] = []
+                self.annotation_dict_eids[anno['gameid']][anno['quarter']] = []
             self.annotation_dict[anno['gameid']][
                 anno['quarter']].append(anno['gameclock'])
+            self.annotation_dict_eids[anno['gameid']][
+                anno['quarter']].append(anno['eid'])
         for game in self.annotation_dict.values():
             for quarter_ind in game.keys():
                 game[quarter_ind] = np.sort(game[quarter_ind])[::-1]
@@ -114,7 +149,6 @@ class BaseDataset:
                     anno = self.train_annotations[r_ind].copy()
                     anno['gameclock'] += np.random.rand() * self.t_jitter
                     ret = anno
-                
 
                 # check not too close to boundary (i.e. not enough frames to
                 # make a sequence)
@@ -149,11 +183,12 @@ class BaseDataset:
         return {'gameid': str(gameid), 'quarter': int(quarter),
                 'gameclock': float(gameclock), 'eid': int(eid)}
 
-    def propose_Ta(self):
+    def propose_Ta(self, train=True):
         while True:
             g_ind = np.random.randint(0, len(self.games))
             e_ind = np.random.randint(
                 0, len(self.games[self.games.keys()[g_ind]]['events']))
+
             e = self.games[self.games.keys()[g_ind]]['events'][e_ind]
             if len(e['moments']) < self.tfr * 2:
                 continue
@@ -163,9 +198,17 @@ class BaseDataset:
                                          e['moments'][m_ind][2],
                                          e_ind)
 
-    def propose_negative_Ta(self):
+    def propose_negative_Ta(self, train=True):
+        ## make sure it's in the right split
+        if train:
+            annos = self.train_annotations + self.train_voids
+        else:
+            annos = self.val_annotations + self.val_voids
+        split_hash = _hash(annos)
         while True:
             cand = self.propose_Ta()
+            if _hash(cand) not in split_hash:
+                continue
             g_cand = cand['gameclock']
             positives = self.annotation_dict[cand['gameid']][cand['quarter']]
             # too close to a positive label
