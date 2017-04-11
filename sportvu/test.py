@@ -75,8 +75,8 @@ accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
 
 plot_folder = os.path.join('./plots', exp_name)
-if not os.path.exists(plot_folder):
-    os.makedirs(plot_folder)
+if not os.path.exists(os.path.join(plot_folder,'pkl')):
+    os.makedirs(os.path.join(plot_folder,'pkl'))
 
 saver = tf.train.Saver()
 sess = tf.InteractiveSession()
@@ -119,8 +119,8 @@ while True:
     plt.clf()
     # save the raw predictions
     pkl.dump([gameclocks, probs[:, 1], labels], open(
-        os.path.join(plot_folder, '%s-%i.pkl' %(split, ind)), 'w'))
+        os.path.join(plot_folder, 'pkl/%s-%i.pkl' %(split, ind)), 'w'))
     if arguments['--train']:
         pkl.dump(meta, open(
-            os.path.join(plot_folder, '%s-meta-%i.pkl' %(split, ind)), 'w'))
+            os.path.join(plot_folder, 'pkl/%s-meta-%i.pkl' %(split, ind)), 'w'))
     ind += 1

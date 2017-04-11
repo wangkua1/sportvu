@@ -48,7 +48,12 @@ if not os.path.exists(plot_folder):
 
 
 plt.figure()
-all_pred_f = filter(lambda s: '.pkl' in s, os.listdir(plot_folder))
+# if arguments['--train']:
+#     split = 'train'
+# else:
+split = 'val'
+all_pred_f = filter(lambda s:'.pkl' in s and split in s 
+                    and 'meta' not in s,os.listdir(os.path.join(plot_folder,'pkl')))
 
 
 def PR(all_pred_f, detector):
@@ -57,7 +62,7 @@ def PR(all_pred_f, detector):
     intersect = 0
     for ind, f in tqdm(enumerate(all_pred_f)):
         gameclocks, pnr_probs, labels = pkl.load(
-            open(os.path.join(plot_folder, '%i.pkl' % (ind)), 'rb'))
+            open(os.path.join(plot_folder, 'pkl/%i.pkl' % (ind)), 'rb'))
         cands = detector.detect(pnr_probs, gameclocks)
         for label in labels:
             label_detected = False

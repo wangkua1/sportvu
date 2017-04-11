@@ -2,7 +2,7 @@
 * not super useful, a simple script that plots a) raw pred, b) gt pnr, c) detector output
 at 1 single setting
 Usage:
-    detection_from_raw_pred.py <fold_index> <f_data_config> <f_model_config> <f_detect_config>
+    detection_from_raw_pred.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> --train
 
 Arguments:
 Example:
@@ -49,9 +49,17 @@ if not os.path.exists(plot_folder):
 
 
 plt.figure()
-all_pred_f = filter(lambda s:'.pkl' in s,os.listdir(plot_folder))
-for ind, f in tqdm(enumerate(all_pred_f)):
-    gameclocks, pnr_probs, labels = pkl.load(open(os.path.join(plot_folder,'%i.pkl'%(ind)), 'rb'))
+if arguments['--train']:
+    split = 'train'
+else:
+    split = 'val'
+all_pred_f = filter(lambda s:'.pkl' in s and split in s 
+                    and 'meta' not in s,os.listdir(os.path.join(plot_folder,'pkl')))
+for _, f in tqdm(enumerate(all_pred_f)):
+    ind = int(f.split('.')[0].split('-')[1])
+    gameclocks, pnr_probs, labels = pkl.load(open(os.path.join(plot_folder,'pkl/%s-%i.pkl'%(split,ind)), 'rb'))
+    meta = pkl.load( open(
+            os.path.join(plot_folder, 'pkl/%s-meta-%i.pkl' %(split, ind)), 'rb'))
     cands, mp = detector.detect(pnr_probs, gameclocks, True)
     print (cands)
     plt.plot(gameclocks, pnr_probs, '-')
@@ -61,7 +69,8 @@ for ind, f in tqdm(enumerate(all_pred_f)):
     for cand in cands:
         cand_x = np.arange(cand[1], cand[0], .1)
         plt.plot(cand_x, np.ones((len(cand_x))) * .95, '-' )
-    plt.savefig(os.path.join(plot_folder, '%s-%i.png' %(detect_config['class'], ind)))
+    plt.savefig(os.path.join(plot_folder, '%s-%s-%i.png' %(detect_config['class'], split, ind)))
     plt.xlim([0,1])
     plt.ylim([0,1])
+    plt.title('Game: %s, Event: %i'%(meta[1], meta[0]))
     plt.clf()
