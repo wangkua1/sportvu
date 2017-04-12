@@ -86,7 +86,7 @@ ckpt_path = os.path.join("./saves/", exp_name + '.ckpt.best')
 saver.restore(sess, ckpt_path)
 
 every_K_frame = int(arguments['<every_K_frame>'])
-plt.figure()
+# plt.figure()
 ind = 0
 while True:
     print (ind)
@@ -112,11 +112,11 @@ while True:
     feed_dict = net.input(batch_xs, None, True)
     probs = sess.run(tf.nn.softmax(net.output()), feed_dict=feed_dict)
 
-    plt.plot(gameclocks, probs[:, 1], '-')
-    plt.plot(np.array(labels), np.ones((len(labels))), '.')
+    # plt.plot(gameclocks, probs[:, 1], '-')
+    # plt.plot(np.array(labels), np.ones((len(labels))), '.')
 
-    plt.savefig(os.path.join(plot_folder, '%i.png' % ind))
-    plt.clf()
+    # plt.savefig(os.path.join(plot_folder, '%i.png' % ind))
+    # plt.clf()
     # save the raw predictions
     pkl.dump([gameclocks, probs[:, 1], labels], open(
         os.path.join(plot_folder, 'pkl/%s-%i.pkl' %(split, ind)), 'w'))

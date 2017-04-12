@@ -104,6 +104,13 @@ class BaseDataset:
                 if k not in self.train_hash:
                     self.train_hash[k] = []
                 self.train_hash[k].append(va)
+            # hard negative examples
+            ## WARNING: K-fold not supported here
+            ##  user needs to make sure the following pkl
+            ##  comes from the correct fold
+            self.hard_negatives = pickle.load(
+                open(data.constant.data_dir + self.config['data_config']['hard-negatives']))
+            
         self.val_ind = 0
         self.train_ind = 0
 

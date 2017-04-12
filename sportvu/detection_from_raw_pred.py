@@ -21,6 +21,7 @@ import gc
 import matplotlib.pylab as plt
 import cPickle as pkl
 ##
+from sportvu.data.dataset import BaseDataset
 from sportvu.detect.running_window_p import RunWindowP
 from sportvu.detect.nms import NMS
 from sportvu.detect.utils import smooth_1D_array
@@ -32,6 +33,8 @@ print ("............\n")
 f_data_config = arguments['<f_data_config>']
 f_model_config = arguments['<f_model_config>']
 f_detect_config = arguments['<f_detect_config>']
+if arguments['--train']:
+    dataset = BaseDataset(f_data_config, fold_index=int(arguments['<fold_index>']), load_raw=True)
 # pre_trained = arguments['<pre_trained>']
 data_config = yaml.load(open(f_data_config, 'rb'))
 model_config = yaml.load(open(f_model_config, 'rb'))
@@ -47,6 +50,11 @@ plot_folder = os.path.join('./plots', exp_name)
 if not os.path.exists(plot_folder):
     raise Exception('Run test.py first to get raw predictions')
 
+def label_in_cand(cand, labels):
+    for l in labels:
+        if l > cand[1] and l < cand[0]:
+            return True
+    return False
 
 plt.figure()
 if arguments['--train']:
@@ -55,22 +63,29 @@ else:
     split = 'val'
 all_pred_f = filter(lambda s:'.pkl' in s and split in s 
                     and 'meta' not in s,os.listdir(os.path.join(plot_folder,'pkl')))
+if arguments['--train']:
+    annotations = []
 for _, f in tqdm(enumerate(all_pred_f)):
     ind = int(f.split('.')[0].split('-')[1])
     gameclocks, pnr_probs, labels = pkl.load(open(os.path.join(plot_folder,'pkl/%s-%i.pkl'%(split,ind)), 'rb'))
     meta = pkl.load( open(
             os.path.join(plot_folder, 'pkl/%s-meta-%i.pkl' %(split, ind)), 'rb'))
-    cands, mp = detector.detect(pnr_probs, gameclocks, True)
+    cands, mp, frame_indices = detector.detect(pnr_probs, gameclocks, True)
     print (cands)
     plt.plot(gameclocks, pnr_probs, '-')
     if mp is not None:
         plt.plot(gameclocks, mp, '-')
     plt.plot(np.array(labels), np.ones((len(labels))), '.')
-    for cand in cands:
+    for ind, cand in enumerate(cands):
         cand_x = np.arange(cand[1], cand[0], .1)
         plt.plot(cand_x, np.ones((len(cand_x))) * .95, '-' )
-    plt.savefig(os.path.join(plot_folder, '%s-%s-%i.png' %(detect_config['class'], split, ind)))
-    plt.xlim([0,1])
+        ## if FP, record annotations
+        if arguments['--train'] and not label_in_cand(cand, labels):
+            anno = {'gameid':meta[1], 'gameclock':gameclocks[frame_indices[ind]],
+                    'eid':meta[0], 'quarter':dataset.games[meta[1]]['events'][meta[0]]['quarter']}
+            annotations.append(anno)
     plt.ylim([0,1])
     plt.title('Game: %s, Event: %i'%(meta[1], meta[0]))
+    plt.savefig(os.path.join(plot_folder, '%s-%s-%i.png' %(detect_config['class'], split, ind)))
     plt.clf()
+pkl.dump(annotations, open(os.path.join(plot_folder,'pkl/hard-negative-examples.pkl'), 'wb'))

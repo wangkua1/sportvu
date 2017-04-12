@@ -21,4 +21,4 @@ class NMS:
         if not return_modified_p:
             return cands
         else:
-            return cands, nms_p
+            return cands, nms_p, indices_proposal_centers
