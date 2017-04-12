@@ -1,6 +1,7 @@
 """make_sequences_from_sportvu.py
 
 Usage:
+    make_sequences_from_sportvu.py <f_data_config> --sample
     make_sequences_from_sportvu.py <f_data_config> 
 
 Arguments:
@@ -62,7 +63,31 @@ for fold_index in tqdm(xrange(data_config['data_config']['N_folds'])):
     np.save(os.path.join(curr_folder, 'pos_x'), x)
     np.save(os.path.join(curr_folder, 'pos_t'), t)
 
-    x, t = loader.next_batch(extract=False)
+    if arguments['--sample']:
+        x, t = loader.next_batch(extract=False)
+    else:
+        xs = []
+        while True:
+            loaded = loader.load_split_event('train',extract=False)
+            if loaded is not None:
+                if loaded == 0:
+                    continue
+                batch_xs, labels, gameclocks, meta = loaded
+                ## filter out positive examples
+                new_batch_xs = []
+                for x in batch_xs:
+                    e_gc = x.moments[len(x.moments)/2].game_clock
+                    ispositive = False
+                    for label in labels:
+                        if np.abs(e_gc-label) < data_config['data_config']['t_negative']:
+                            ispositive = True
+                            break
+                    if not ispositive:
+                        xs.append(x)
+            else:
+                x = xs
+                break
+
     x = np.array([make_3teams_11players(extractor.extract_raw(e))
                   for e in x])
     np.save(os.path.join(curr_folder, 'neg_x'), x)

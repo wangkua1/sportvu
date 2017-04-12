@@ -108,8 +108,9 @@ class BaseDataset:
             ## WARNING: K-fold not supported here
             ##  user needs to make sure the following pkl
             ##  comes from the correct fold
-            self.hard_negatives = pickle.load(
-                open(data.constant.data_dir + self.config['data_config']['hard-negatives']))
+            if 'hard-negatives' in self.config['data_config']:
+                self.hard_negatives = pickle.load(
+                    open(data.constant.data_dir + self.config['data_config']['hard-negatives']))
             
         self.val_ind = 0
         self.train_ind = 0
@@ -211,7 +212,7 @@ class BaseDataset:
             annos = self.train_annotations + self.train_voids
         else:
             annos = self.val_annotations + self.val_voids
-        split_hash = _hash(annos)
+        split_hash = [_hash(anno) for anno in annos]
         while True:
             cand = self.propose_Ta()
             if _hash(cand) not in split_hash:
