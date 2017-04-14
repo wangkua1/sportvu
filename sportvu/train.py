@@ -21,6 +21,7 @@ from __future__ import print_function
 import numpy as np
 # model
 import tensorflow as tf
+optimize_loss = tf.contrib.layers.optimize_loss
 import sys
 import os
 if os.environ['HOME'] == '/u/wangkua1':  # jackson guppy
@@ -57,11 +58,15 @@ exp_name = '%s-X-%s' % (model_name, data_name)
 dataset = BaseDataset(f_data_config, int(
     arguments['<fold_index>']), load_raw=True)
 extractor = BaseExtractor(f_data_config)
+if 'negative_fraction_hard' in data_config:
+    nfh = data_config['negative_fraction_hard']
+else:
+    nfh = 0
 if ('version' in data_config['extractor_config']
         and data_config['extractor_config']['version'] >= 2):
     loader = SequenceLoader(dataset, extractor, data_config[
                             'batch_size'], fraction_positive=0.5,
-                            negative_fraction_hard=data_config['negative_fraction_hard'])
+                            negative_fraction_hard=nfh)
 elif 'no_extract' in data_config and data_config['no_extract']:
     loader = EventLoader(dataset, extractor, None, fraction_positive=0.5)
 else:
@@ -94,9 +99,13 @@ net.build()
 
 # build loss
 y_ = tf.placeholder(tf.float32, [None, 2])
+learning_rate = tf.placeholder(tf.float32, [])
 cross_entropy = tf.reduce_mean(
     tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=net.output()))
-train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
+# train_step = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
+global_step = tf.Variable(0)
+train_step = optimize_loss(cross_entropy, global_step, learning_rate, 
+            optimizer=lambda lr: tf.train.AdamOptimizer(lr))
 correct_prediction = tf.equal(tf.argmax(net.output(), 1), tf.argmax(y_, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
@@ -148,6 +157,7 @@ val_writer = tf.summary.FileWriter(os.path.join(log_folder, 'val'), sess.graph)
 tf.global_variables_initializer().run()
 # Train
 best_val_acc = 0
+lrv = 1e-4
 for iter_ind in tqdm(range(20000)):
     # if iter_ind ==0:
     loaded = cloader.next()
@@ -164,6 +174,9 @@ for iter_ind in tqdm(range(20000)):
         raise Exception('input format not specified')
     feed_dict = net.input(batch_xs, None, True)
     feed_dict[y_] = batch_ys
+    if iter_ind >0 and iter_ind % 3000==0:
+        lrv *= .2
+    feed_dict[learning_rate] = lrv
     summary, _ = sess.run([merged, train_step], feed_dict=feed_dict)
     train_writer.add_summary(summary, iter_ind)
     if iter_ind % 100 == 0:

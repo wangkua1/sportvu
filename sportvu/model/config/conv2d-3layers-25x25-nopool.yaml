@@ -1,0 +1,12 @@
+## tried one with exact same config, but keep_prob=.8, still overfitted a bit
+## advantage: very quick to train, one of the best accuracy at rev2
+class_name: ConvNet2d
+### Dataset Configuration
+model_config: 
+    d1: 25
+    d2: 25
+    conv_layers: [[5, 5, 3, 32], [5, 5, 32, 64], [5, 5, 64, 128]]
+    fc_layers: [512, 2]
+    keep_prob: .7
+    bn: False
+    pool: False

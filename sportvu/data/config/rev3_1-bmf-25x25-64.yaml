@@ -2,7 +2,7 @@
 node1: &randseed 1
 randseed: *randseed
 
-preproc_dir: rev3
+preproc_dir: rev3_1
 no_extract: True ####
 n_negative_examples: 3000
 ### Dataset Configuration
@@ -11,20 +11,18 @@ data_config:
     N_folds: 5
     game_ids: ['0021500357', '0021500278', '0021500150']
     annotation: 'data/pnr-annotations/gt/rev0.pkl'
-    hard-negatives: 'data/pnr-annotations/gt/rev0-hard-negatives.pkl'
     tfr: 50
     t_jitter: 0 ## in the scale of gameclock, which is seconds
     t_negative: 2 ## t_negative seconds away from annotation, in seconds
-batch_size: 32
-negative_fraction_hard: .5
+batch_size: 64
 extractor_config:
     version: 2
     #augmentation (turned off when validating)
     tfa_jitter_radius: 20 
-    tfr: 40
+    tfr: 30
     d0flip: True
     d1flip: True
-    jitter: [0, 0]
+    jitter: [1, 1]
     #parametrization
     video: False
     crop: 'bmf' #{'bmf', 'tb'} #bmf=Ball-Mid-Frame, tb=Track-Ball

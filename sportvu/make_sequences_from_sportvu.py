@@ -67,7 +67,11 @@ for fold_index in tqdm(xrange(data_config['data_config']['N_folds'])):
         x, t = loader.next_batch(extract=False)
     else:
         xs = []
+        ind = 0
         while True:
+            print (ind)
+            print (len(xs))
+            ind+=1
             loaded = loader.load_split_event('train',extract=False)
             if loaded is not None:
                 if loaded == 0:

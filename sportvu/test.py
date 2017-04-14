@@ -2,6 +2,7 @@
 
 Usage:
     test.py <fold_index> <f_data_config> <f_model_config> <every_K_frame> --train
+    test.py <fold_index> <f_data_config> <f_model_config> <every_K_frame>
 
 Arguments:
     <f_data_config>  example ''data/config/train_rev0.yaml''

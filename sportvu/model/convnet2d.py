@@ -21,6 +21,10 @@ class ConvNet2d:
                 self.training = tf.placeholder(tf.bool)
         else:
             self.bn = False
+        if 'pool' in config:## later version
+            self.pool = config['pool']
+        else:
+            self.pool = False
     # convnet
 
     def build(self):
@@ -35,10 +39,14 @@ class ConvNet2d:
         for layer_ind in xrange(len(self.conv_layers)):
             W_conv.append(weight_variable(self.conv_layers[layer_ind]))
             b_conv.append(bias_variable([self.conv_layers[layer_ind][-1]]))
-
-        SHAPE_convlast = int(np.ceil(self.d1 / (2**len(self.conv_layers))) *
-                             np.ceil(self.d2 / (2**len(self.conv_layers))) *
-                             self.conv_layers[-1][-1])
+        if self.pool:
+            SHAPE_convlast = int(np.ceil(self.d1 / (2**len(self.conv_layers))) *
+                                 np.ceil(self.d2 / (2**len(self.conv_layers))) *
+                                 self.conv_layers[-1][-1])
+        else:
+            SHAPE_convlast = int(np.ceil(self.d1 ) *
+                                 np.ceil(self.d2 ) *
+                                 self.conv_layers[-1][-1])
         # fc
         W_fc = []
         b_fc = []
@@ -54,7 +62,10 @@ class ConvNet2d:
         for layer_ind in xrange(len(self.conv_layers)):
             h_conv = tf.nn.relu(
                 conv2d(h_pool_drop, W_conv[layer_ind]) + b_conv[layer_ind])
-            h_pool = max_pool_2x2(h_conv)
+            if self.pool:
+                h_pool = max_pool_2x2(h_conv)
+            else:
+                h_pool = h_conv
             if self.bn:
                 h_pool = bn(h_pool, self.training)
             h_pool_drop = tf.nn.dropout(h_pool, keep_prob)

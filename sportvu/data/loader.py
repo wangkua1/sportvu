@@ -330,7 +330,8 @@ class SequenceLoader:
         self.pos_x = np.load(os.path.join(self.root_dir, 'pos_x.npy'))
         self.neg_x = np.load(os.path.join(self.root_dir, 'neg_x.npy'))
         self.pos_t = np.load(os.path.join(self.root_dir, 'pos_t.npy'))
-        self.neg_t = np.load(os.path.join(self.root_dir, 'neg_t.npy'))
+        # self.neg_t = np.load(os.path.join(self.root_dir, 'neg_t.npy'))
+        self.neg_t = np.array([[1, 0]]).repeat(self.neg_x.shape[0], axis=0)
         if self.negative_fraction_hard >0:
             self.hard_neg_x = np.load(os.path.join(self.root_dir, 'hard_neg_x.npy'))
             self.hard_neg_t = np.load(os.path.join(self.root_dir, 'hard_neg_t.npy'))
