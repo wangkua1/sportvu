@@ -1,0 +1,6 @@
+model_checkpoint_path: "conv2d-3layers-25x25-nopool-large-bn-X-rev3_1-bmf-25x25-6418000.ckpt"
+all_model_checkpoint_paths: "conv2d-3layers-25x25-nopool-large-bn-X-rev3_1-bmf-25x25-6410000.ckpt"
+all_model_checkpoint_paths: "conv2d-3layers-25x25-nopool-large-bn-X-rev3_1-bmf-25x25-6412000.ckpt"
+all_model_checkpoint_paths: "conv2d-3layers-25x25-nopool-large-bn-X-rev3_1-bmf-25x25-6414000.ckpt"
+all_model_checkpoint_paths: "conv2d-3layers-25x25-nopool-large-bn-X-rev3_1-bmf-25x25-6416000.ckpt"
+all_model_checkpoint_paths: "conv2d-3layers-25x25-nopool-large-bn-X-rev3_1-bmf-25x25-6418000.ckpt"

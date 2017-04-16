@@ -30,8 +30,11 @@ class BaseExtractor:
 
     def __init__(self, f_config):
         self.augment = True
-        self.config = yaml.load(open(f_config, 'rb'))['extractor_config']
-
+        if type(f_config) == str:
+            self.config = yaml.load(open(f_config, 'rb'))['extractor_config']
+        else:
+            self.config = f_config['extractor_config']
+            
     def extract_raw(self, event):
         """
         """

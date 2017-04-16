@@ -46,7 +46,10 @@ class BaseDataset:
     def __init__(self, f_config, fold_index, load_raw=True, no_anno=False):
         # configuration
         self.fold_index = fold_index
-        self.config = yaml.load(open(f_config, 'rb'))
+        if type(f_config) ==str:
+            self.config = yaml.load(open(f_config, 'rb'))
+        else:
+            self.config = f_config
         assert (fold_index >= 0 and fold_index <
                 self.config['data_config']['N_folds'])
         self.tfr = self.config['data_config']['tfr']

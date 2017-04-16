@@ -1,0 +1,4 @@
+model_checkpoint_path: "conv2d-3layers-25x25-tuned-X-rev3_1-hard-bmf-25x25-22000.ckpt"
+all_model_checkpoint_paths: "conv2d-3layers-25x25-tuned-X-rev3_1-hard-bmf-25x25-20.ckpt"
+all_model_checkpoint_paths: "conv2d-3layers-25x25-tuned-X-rev3_1-hard-bmf-25x25-2.ckpt.best"
+all_model_checkpoint_paths: "conv2d-3layers-25x25-tuned-X-rev3_1-hard-bmf-25x25-22000.ckpt"

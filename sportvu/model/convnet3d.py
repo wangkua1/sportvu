@@ -67,7 +67,7 @@ class ConvNet3d:
         h_pool_flat = tf.reshape(h_pool_drop, [-1, SHAPE_convlast])
         h_fc_drop = h_pool_flat
         for layer_ind in xrange(len(self.fc_layers) - 2):
-            h_fc = tf.nn.relu(tf.matmul(h_pool_flat, W_fc[
+            h_fc = tf.nn.relu(tf.matmul(h_fc_drop, W_fc[
                               layer_ind]) + b_fc[layer_ind])
             if self.bn:
                 h_fc = bn(h_fc, self.training)
