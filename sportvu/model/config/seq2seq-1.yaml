@@ -1,0 +1,12 @@
+class_name: Seq2Seq
+### Dataset Configuration
+model_config: 
+    d1: 100
+    d2: 50
+    conv_layers: [[5, 5, 4, 32], [5, 5, 32, 64], [5,5,64,64]]
+    fc_layers: [64,2]
+    keep_prob: .8
+    rnn_hid_dim: 256
+    encoder_time_size: 20
+    decoder_time_size: 20
+    batch_size: 4

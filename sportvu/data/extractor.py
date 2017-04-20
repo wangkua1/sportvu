@@ -173,6 +173,75 @@ class BaseExtractor:
             return bcxy
 
 
+
+class Seq2SeqExtractor(BaseExtractor):
+    """
+    """
+
+    def __init__(self, f_config):
+        super(Seq2SeqExtractor, self).__init__(f_config)    
+
+    
+    def extract_batch(self, events_arr, input_is_sequence=False):
+        sample_rate = 1
+        Y_RANGE = 100
+        X_RANGE = 50
+        if input_is_sequence:
+            sequences = events_arr
+        else:
+            sequences = np.array([make_3teams_11players(
+                self.extract_raw(e)) for e in events_arr])
+        # time crop (+jitter) , spatial crop
+        if 'version' in self.config and self.config['version'] >= 2:
+            if self.augment:
+                t_jit = np.min([self.config['tfa_jitter_radius'],
+                                sequences.shape[2] / 2 - self.config['tfr']])
+                t_jit = (2 * t_jit * np.random.rand()
+                         ).round().astype('int32') - t_jit
+            else:
+                t_jit = 0
+            tfa = int(sequences.shape[2] / 2 + t_jit)
+            sequences = sequences[:, :, tfa -
+                                  self.config['tfr']:tfa + self.config['tfr']]
+            if 'crop' in self.config and self.config['crop'] != '':
+                reference = make_reference(sequences, self.config[
+                                           'crop_size'], self.config['crop'])
+                sequences = sequences - reference
+                Y_RANGE = self.config['crop_size'][0] + 2
+                X_RANGE = self.config['crop_size'][1] + 2
+        # spatial jitter
+        if self.augment and np.sum(self.config['jitter']) > 0:
+            d0_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][0]
+            d1_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][1]
+            # hacky: can delete after -- temporary for malformed data (i.e.
+            # missing player)
+            try:
+                sequences[:, :, :, 0] += d0_jit
+            except:
+                raise ExtractorException()
+            sequences[:, :, :, 1] += d1_jit
+        ##
+        bctxy = pictorialize_fast(sequences, sample_rate, Y_RANGE, X_RANGE, keep_channels=True)
+
+        # if cropped, shave off the extra padding
+        if ('version' in self.config and self.config['version'] >= 2
+                and 'crop' in self.config):
+            bctxy = bctxy[:, :, :, 1:-1, 1:-1]
+        # compress the time dimension
+        if 'video' in self.config and self.config['video']:
+            if self.augment and self.config['d0flip'] and np.random.rand > .5:
+                bctxy = bctxy[:, :, :, ::-1]
+            if self.augment and self.config['d1flip'] and np.random.rand > .5:
+                bctxy = bctxy[:, :, :, :, ::-1]
+            return bctxy
+        else:
+            bcxy = bctxy.sum(2)
+            bcxy[bcxy > 1] = 1
+            if self.augment and self.config['d0flip'] and np.random.rand > .5:
+                bcxy = bcxy[:, :, ::-1]
+            if self.augment and self.config['d1flip'] and np.random.rand > .5:
+                bcxy = bcxy[:, :, :, ::-1]
+            return bcxy
 """
 HalfCourt Extractor
 This extractor takes the Event

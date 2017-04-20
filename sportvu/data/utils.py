@@ -82,7 +82,7 @@ def make_3teams_11players(sequence):
     return ret
 
 
-def pictorialize_fast(xx, sample_rate=1, Y_RANGE=100, X_RANGE=50):
+def pictorialize_fast(xx, sample_rate=1, Y_RANGE=100, X_RANGE=50, keep_channels=False):
     """
     xx of shape (Batch, Players=11, Time, 2)
     return: shape (Batch, Teams=3, Time, Y_RANGE, X_RANGE) one hot encoded pictures
@@ -111,6 +111,9 @@ def pictorialize_fast(xx, sample_rate=1, Y_RANGE=100, X_RANGE=50):
     nr_target[ind0, nr_xx[:, 0] / sample_rate, nr_xx[:, 1] / sample_rate] = 1.
     target = nr_target.reshape(target_shape)
     target = np.rollaxis(target, 1, 2)
+    if keep_channels:
+        target[target>1] = 1
+        return target
     # merge players into teams
     s = list(target.shape)
     s[1] = 3
