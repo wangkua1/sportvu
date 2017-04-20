@@ -436,6 +436,7 @@ class Seq2SeqLoader:
             self.N_hard_neg = int(self.N_neg * negative_fraction_hard)
             self.N_neg = self.N_neg - self.N_hard_neg
             self.hard_neg_ind = 0
+        self.val_ind = 0
 
     def next(self):
         """
@@ -482,11 +483,13 @@ class Seq2SeqLoader:
         return ret
         
     def load_valid(self, extract=True):
-        x = self.val_x
+        if self.val_ind+self.batch_size > len(self.val_x):
+            self.val_ind = 0
+            return None
+        x = self.val_x[self.val_ind:self.val_ind+self.batch_size]
         if extract:
-            x = self.extractor.extract_batch(x, input_is_sequence=True)
-        t = self.val_t
-        return x, t
+            ret = self.extractor.extract_batch(x, input_is_sequence=True)
+        return ret
 
     def reset(self):
         self.batch_index = 0
