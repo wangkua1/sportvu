@@ -63,8 +63,12 @@ class Seq2Seq:
                     scope.reuse_variables()
                     if self.teacher_forcing: ## feed in prediction
                         ## output (BATCH, 2)
-                        output = output + tf_dec_target_xy[:, rnn_step_ind - 1]
-                        indices = tf.add(tf.scalar_mul(self.d2, output[:,0]),output[:,1])
+                        if rnn_step_ind == 1:
+                            ref = tf_dec_target_xy[:, 0]
+                        else:
+                            ref = abs_output
+                        abs_output = output + ref
+                        indices = tf.add(tf.scalar_mul(self.d2, abs_output[:,0]),abs_output[:,1])
                         output = tf.one_hot(tf.cast(indices, tf.int32), self.d1*self.d2)
                         output = tf.reshape(output, (self.batch_size, self.d1, self.d2))
                         input_[:,:,:,0] = output
