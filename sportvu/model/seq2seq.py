@@ -24,6 +24,7 @@ class Seq2Seq:
 
     def build(self):
         # placeholders
+        tf_enc_input = tf.placeholder(tf.float32, [self.batch_size, self.channel_size, self.encoder_time_size, self.d1, self.d2])
         tf_dec_input = tf.placeholder(tf.float32, [self.batch_size, self.channel_size, self.decoder_time_size, self.d1, self.d2])
         keep_prob = tf.placeholder(tf.float32)
         self.tf_dec_target_xy = tf.placeholder(tf.float32, [self.batch_size, self.decoder_time_size, 2])
@@ -42,8 +43,11 @@ class Seq2Seq:
         ## pre-rnn
         self.W_pre_rnn = weight_variable([SHAPE_convlast, self.rnn_hid_dim])
         self.b_pre_rnn = bias_variable([self.rnn_hid_dim])
-        ## rnn
-        cell = tf.contrib.rnn.BasicLSTMCell(self.rnn_hid_dim, state_is_tuple=True)
+        ## rnn 
+        # Enc
+        enc_cell = tf.contrib.rnn.BasicLSTMCell(self.rnn_hid_dim, state_is_tuple=True)
+        # Dec
+        dec_cell = tf.contrib.rnn.BasicLSTMCell(self.rnn_hid_dim, state_is_tuple=True)
         # fc (post-rnn)
         W_fc = []
         b_fc = []
@@ -53,9 +57,28 @@ class Seq2Seq:
                 [self.fc_layers[layer_ind], self.fc_layers[layer_ind + 1]]))
             b_fc.append(bias_variable([self.fc_layers[layer_ind + 1]]))
         
+        ## Build Graph
+        # build encoder
+        # tf_enc_input (B, C, T, Y, X)
+        tf_r_enc_input = tf.transpose( tf_enc_input, (0,2,3,4,1)) # (B,T,Y,X,C)
+        tf_r_enc_input = tf.reshape(tf_r_enc_input, # (B*T, Y,X,C)
+                            (self.batch_size*self.encoder_time_size, self.d1,self.d2,self.channel_size))
+        # conv
+        h_pool_drop = tf_r_enc_input
+        for layer_ind in xrange(len(self.conv_layers)):
+            h_conv = tf.nn.relu(
+                conv2d(h_pool_drop, W_conv[layer_ind]) + b_conv[layer_ind])
+            h_pool = max_pool_2x2(h_conv)
+            h_pool_drop = tf.nn.dropout(h_pool, keep_prob)
+        h_pool_flat = tf.reshape(h_pool_drop, [-1, SHAPE_convlast])
+        h_rnn = tf.nn.relu(tf.matmul(h_pool_flat,self.W_pre_rnn ) + self.b_pre_rnn)
+        h_rnn = tf.reshape(h_rnn, (self.batch_size, self.encoder_time_size, self.rnn_hid_dim))
+        # enc-rnn
+        _, end_states = tf.contrib.rnn.static_rnn(enc_cell, tf.unstack(tf.transpose(h_rnn, [1,0,2])), dtype=tf.float32)
+        ##
         # build decoder
         dec_outputs = []
-        initial_state = cell.zero_state(self.batch_size, tf.float32) ## TODO: use encoder states
+        initial_state = dec_cell.zero_state(self.batch_size, tf.float32) ## TODO: use encoder states
         state = initial_state
         with tf.variable_scope("dec_rnn") as scope:
             for rnn_step_ind, input_ in enumerate(tf.unstack(tf.transpose(tf_dec_input, [2,0,3,4,1]))):
@@ -87,7 +110,7 @@ class Seq2Seq:
                 h_pool_flat = tf.reshape(h_pool_drop, [-1, SHAPE_convlast])
                 h_rnn = tf.nn.relu(tf.matmul(h_pool_flat,self.W_pre_rnn ) + self.b_pre_rnn)
                 ## RNN cell
-                h_rnn, state = cell(h_rnn, state)
+                h_rnn, state = dec_cell(h_rnn, state)
                 # fc output
                 h_fc_drop = h_rnn
                 for layer_ind in xrange(len(self.fc_layers) - 2):
@@ -99,15 +122,16 @@ class Seq2Seq:
                 dec_outputs.append(output)
         
         
-
+        self.tf_enc_input = tf_enc_input
         self.tf_dec_input = tf_dec_input
         self.keep_prob = keep_prob
         self.outputs = tf.transpose(dec_outputs, [1,0,2]) # -> (BATCH, TIME, 2)
 
-    def input(self, dec_input,dec_target_sequence, keep_prob=None, teacher_forcing=True):
+    def input(self, enc_input, dec_input,dec_target_sequence, keep_prob=None, teacher_forcing=True):
         if keep_prob == None: #default, 'training'
             keep_prob = self.value_keep_prob
         ret_dict = {}
+        ret_dict[self.tf_enc_input] = enc_input
         ret_dict[self.tf_dec_input] = dec_input
         ret_dict[self.tf_dec_target_xy] = dec_target_sequence
         ret_dict[self.keep_prob] = keep_prob
@@ -139,6 +163,7 @@ if __name__ == '__main__':
     model_config = yaml.load(open(f_model_config, 'rb'))['model_config']
     model_config['keep_prob'] = 1
     ## Fake Data
+    enc_input = np.random.rand(model_config['batch_size'], 4, model_config['encoder_time_size'], model_config['d1'], model_config['d2'] )
     dec_input = np.random.rand(model_config['batch_size'], 4, model_config['decoder_time_size'], model_config['d1'], model_config['d2'] )
     dec_output = np.random.rand(model_config['batch_size'], model_config['decoder_time_size'], 2)
     dec_target_sequence = np.random.rand(model_config['batch_size'], model_config['decoder_time_size'], 2) 
@@ -156,14 +181,14 @@ if __name__ == '__main__':
 
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
-    feed_dict = net.input(dec_input, dec_target_sequence)
+    feed_dict = net.input(enc_input,dec_input, dec_target_sequence)
     feed_dict[learning_rate] = 1e-4
     feed_dict[y_] = dec_output
     for train_step_ind in xrange(10):
         l = sess.run(train_step, feed_dict=feed_dict)
         print (l)
     print ('.........')
-    feed_dict = net.input(dec_input, dec_target_sequence, teacher_forcing=False)
+    feed_dict = net.input(enc_input,dec_input, dec_target_sequence, teacher_forcing=False)
     feed_dict[learning_rate] = 1e-4
     feed_dict[y_] = dec_output
     for train_step_ind in xrange(10):
