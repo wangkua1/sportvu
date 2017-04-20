@@ -14,7 +14,7 @@ class ExtractorException(Exception):
     pass
 
 
-class BaseExtractor:
+class BaseExtractor(object):
     """base class for sequence extraction
         Input: a truncated Event
         Output: classifier model input
@@ -179,10 +179,17 @@ class Seq2SeqExtractor(BaseExtractor):
     """
 
     def __init__(self, f_config):
-        super(Seq2SeqExtractor, self).__init__(f_config)    
+        # super(Seq2SeqExtractor, self).__init__(f_config)    
+        super(self.__class__, self).__init__(f_config)
 
     
     def extract_batch(self, events_arr, input_is_sequence=False):
+        """
+        Say, enc_time = (10) 0-10
+             dec_time = (10) 11-20
+             dec_target_sequence = (10) 11-20
+             decoder_output = (10) 12-21
+        """
         sample_rate = 1
         Y_RANGE = 100
         X_RANGE = 50
@@ -191,24 +198,6 @@ class Seq2SeqExtractor(BaseExtractor):
         else:
             sequences = np.array([make_3teams_11players(
                 self.extract_raw(e)) for e in events_arr])
-        # time crop (+jitter) , spatial crop
-        if 'version' in self.config and self.config['version'] >= 2:
-            if self.augment:
-                t_jit = np.min([self.config['tfa_jitter_radius'],
-                                sequences.shape[2] / 2 - self.config['tfr']])
-                t_jit = (2 * t_jit * np.random.rand()
-                         ).round().astype('int32') - t_jit
-            else:
-                t_jit = 0
-            tfa = int(sequences.shape[2] / 2 + t_jit)
-            sequences = sequences[:, :, tfa -
-                                  self.config['tfr']:tfa + self.config['tfr']]
-            if 'crop' in self.config and self.config['crop'] != '':
-                reference = make_reference(sequences, self.config[
-                                           'crop_size'], self.config['crop'])
-                sequences = sequences - reference
-                Y_RANGE = self.config['crop_size'][0] + 2
-                X_RANGE = self.config['crop_size'][1] + 2
         # spatial jitter
         if self.augment and np.sum(self.config['jitter']) > 0:
             d0_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][0]
@@ -220,28 +209,36 @@ class Seq2SeqExtractor(BaseExtractor):
             except:
                 raise ExtractorException()
             sequences[:, :, :, 1] += d1_jit
+        ## temporal segment
+        target_player_ind = np.random.randint(1,6)
+        N_total_frames = sequences.shape[2]
+        start_time =  np.round((np.random.rand() * (N_total_frames - 
+                        (1+self.config['encoder_input_time']+self.config['decoder_input_time']))
+                        )).astype('int32') 
+        input_seq = sequences[:, :, start_time:start_time+self.config['encoder_input_time']+self.config['decoder_input_time']]
+        dec_target_sequence = sequences[:, target_player_ind, start_time+self.config['encoder_input_time']
+                                 :start_time+self.config['encoder_input_time']+self.config['decoder_input_time']]
+        output_m1 =  sequences[:, target_player_ind, start_time+self.config['encoder_input_time'] 
+                                 :1+start_time+self.config['encoder_input_time']+self.config['decoder_input_time']]
+        output = output_m1[:,1:] - output_m1[:,:-1]
         ##
-        bctxy = pictorialize_fast(sequences, sample_rate, Y_RANGE, X_RANGE, keep_channels=True)
-
-        # if cropped, shave off the extra padding
-        if ('version' in self.config and self.config['version'] >= 2
-                and 'crop' in self.config):
-            bctxy = bctxy[:, :, :, 1:-1, 1:-1]
-        # compress the time dimension
-        if 'video' in self.config and self.config['video']:
-            if self.augment and self.config['d0flip'] and np.random.rand > .5:
-                bctxy = bctxy[:, :, :, ::-1]
-            if self.augment and self.config['d1flip'] and np.random.rand > .5:
-                bctxy = bctxy[:, :, :, :, ::-1]
-            return bctxy
-        else:
-            bcxy = bctxy.sum(2)
-            bcxy[bcxy > 1] = 1
-            if self.augment and self.config['d0flip'] and np.random.rand > .5:
-                bcxy = bcxy[:, :, ::-1]
-            if self.augment and self.config['d1flip'] and np.random.rand > .5:
-                bcxy = bcxy[:, :, :, ::-1]
-            return bcxy
+        bctxy = pictorialize_fast(input_seq, sample_rate, Y_RANGE, X_RANGE, keep_channels=True)        
+        if self.augment and self.config['d0flip'] and np.random.rand > .5:
+            bctxy = bctxy[:, :, :, ::-1]
+        if self.augment and self.config['d1flip'] and np.random.rand > .5:
+            bctxy = bctxy[:, :, :, :, ::-1]
+        seq_inp = np.zeros((bctxy.shape[0], 4, self.config['encoder_input_time']+self.config['decoder_input_time'], Y_RANGE, X_RANGE))
+        #target player
+        seq_inp[:,0] = bctxy[:,target_player_ind]
+        #ball
+        seq_inp[:,1] = bctxy[:,0]
+        #team
+        seq_inp[:,2] = np.concatenate([bctxy[:,1:target_player_ind], bctxy[:,target_player_ind+1:6]], axis=1).sum(1)
+        #defense
+        seq_inp[:,3] = bctxy[:,6:].sum(1)
+        enc_inp = seq_inp[:,:,:self.config['encoder_input_time']]
+        dec_inp = seq_inp[:,:,self.config['encoder_input_time']:]
+        return enc_inp, dec_inp, dec_target_sequence, output
 """
 HalfCourt Extractor
 This extractor takes the Event

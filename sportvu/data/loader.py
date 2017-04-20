@@ -474,13 +474,13 @@ class Seq2SeqLoader:
 
 
         if extract:
-            x = self.extractor.extract_batch(x, input_is_sequence=True)
+            ret = self.extractor.extract_batch(x, input_is_sequence=True)
         self.pos_ind += self.N_pos
         self.neg_ind += self.N_neg
         if self.negative_fraction_hard >0:
             self.hard_neg_ind += self.N_hard_neg
-        return x, t
-
+        return ret
+        
     def load_valid(self, extract=True):
         x = self.val_x
         if extract:

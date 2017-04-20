@@ -14,21 +14,15 @@ data_config:
     tfr: 50
     t_jitter: 0 ## in the scale of gameclock, which is seconds
     t_negative: 2 ## t_negative seconds away from annotation, in seconds
-batch_size: 32
+batch_size: 4
 extractor_config:
-    version: 2
+    version: 3
     #augmentation (turned off when validating)
-    tfa_jitter_radius: 20 
-    tfr: 30
     d0flip: True
     d1flip: True
-    jitter: [1, 1]
+    jitter: [3, 3]
     #parametrization
-    video: False
-    crop: 'bmf' #{'bmf', 'tb'} #bmf=Ball-Mid-Frame, tb=Track-Ball
-    crop_size: [25,25] # in units of ft
     input_fov: 'full' # {'full', 'crop', 'hybrid'}
-    output_parametrization: 'xy' #{'xy', 'hpn'}
-    input_length: 20
-    output_length: 10
-    auxiliary: True
+    output_parametrization: 'xy' # {'xy', 'hpn'}
+    encoder_input_time: 19
+    decoder_input_time: 10

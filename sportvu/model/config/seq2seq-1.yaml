@@ -7,6 +7,6 @@ model_config:
     fc_layers: [64,2]
     keep_prob: .8
     rnn_hid_dim: 256
-    encoder_time_size: 20
-    decoder_time_size: 20
+    encoder_time_size: 19
+    decoder_time_size: 10
     batch_size: 4
