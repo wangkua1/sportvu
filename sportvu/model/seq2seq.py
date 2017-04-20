@@ -21,13 +21,13 @@ class Seq2Seq:
         self.decoder_time_size = config['decoder_time_size']
         self.rnn_hid_dim = config['rnn_hid_dim']
         self.batch_size = config['batch_size']
-        self.teacher_forcing = False
 
     def build(self):
         # placeholders
         tf_dec_input = tf.placeholder(tf.float32, [self.batch_size, self.channel_size, self.decoder_time_size, self.d1, self.d2])
         keep_prob = tf.placeholder(tf.float32)
-        tf_dec_target_xy = tf.placeholder(tf.float32, [self.batch_size, self.decoder_time_size, 2])
+        self.tf_dec_target_xy = tf.placeholder(tf.float32, [self.batch_size, self.decoder_time_size, 2])
+        self.teacher_forcing = tf.placeholder(tf.bool)
         # init weights/bias
         # conv
         W_conv = []
@@ -61,19 +61,20 @@ class Seq2Seq:
             for rnn_step_ind, input_ in enumerate(tf.unstack(tf.transpose(tf_dec_input, [2,0,3,4,1]))):
                 if rnn_step_ind > 0:
                     scope.reuse_variables()
-                    if self.teacher_forcing: ## feed in prediction
-                        ## output (BATCH, 2)
-                        if rnn_step_ind == 1:
-                            ref = tf_dec_target_xy[:, 0]
-                        else:
-                            ref = abs_output
-                        abs_output = output + ref
-                        indices = tf.add(tf.scalar_mul(self.d2, abs_output[:,0]),abs_output[:,1])
-                        output = tf.one_hot(tf.cast(indices, tf.int32), self.d1*self.d2)
-                        output = tf.reshape(output, (self.batch_size, self.d1, self.d2))
-                        input_[:,:,:,0] = output
+                    ## output (BATCH, 2)
+                    if rnn_step_ind == 1:
+                        ref = self.tf_dec_target_xy[:, 0]
                     else:
-                        pass
+                        ref = abs_output
+                    abs_output = output + ref
+                    indices = tf.add(tf.scalar_mul(self.d2, abs_output[:,0]),abs_output[:,1])
+                    output = tf.one_hot(tf.cast(indices, tf.int32), self.d1*self.d2)
+                    output = tf.reshape(output, (self.batch_size, self.d1, self.d2))
+                    output = tf.reshape(output, (self.batch_size, self.d1, self.d2,1))
+                    output = tf.cast(output, tf.float32)
+                    input_no_tf = tf.concat([input_[:,:,:,1:], output], -1)
+                    ## select
+                    input_ = tf.where(self.teacher_forcing, input_, input_no_tf)
                 else: ## first step, always feed-in gt
                     pass
                 # conv
@@ -103,12 +104,14 @@ class Seq2Seq:
         self.keep_prob = keep_prob
         self.outputs = tf.transpose(dec_outputs, [1,0,2]) # -> (BATCH, TIME, 2)
 
-    def input(self, dec_input, keep_prob=None):
+    def input(self, dec_input,dec_target_sequence, keep_prob=None, teacher_forcing=True):
         if keep_prob == None: #default, 'training'
             keep_prob = self.value_keep_prob
         ret_dict = {}
         ret_dict[self.tf_dec_input] = dec_input
+        ret_dict[self.tf_dec_target_xy] = dec_target_sequence
         ret_dict[self.keep_prob] = keep_prob
+        ret_dict[self.teacher_forcing] = teacher_forcing
         return ret_dict
 
     def output(self):
@@ -153,14 +156,16 @@ if __name__ == '__main__':
 
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
-    feed_dict = net.input(dec_input)
+    feed_dict = net.input(dec_input, dec_target_sequence)
     feed_dict[learning_rate] = 1e-4
     feed_dict[y_] = dec_output
     for train_step_ind in xrange(10):
         l = sess.run(train_step, feed_dict=feed_dict)
         print (l)
-    net.teacher_forcing = True
     print ('.........')
+    feed_dict = net.input(dec_input, dec_target_sequence, teacher_forcing=False)
+    feed_dict[learning_rate] = 1e-4
+    feed_dict[y_] = dec_output
     for train_step_ind in xrange(10):
         l = sess.run(train_step, feed_dict=feed_dict)
         print (l)
