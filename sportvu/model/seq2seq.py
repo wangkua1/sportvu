@@ -27,7 +27,7 @@ class Seq2Seq:
         # placeholders
         tf_dec_input = tf.placeholder(tf.float32, [self.batch_size, self.channel_size, self.decoder_time_size, self.d1, self.d2])
         keep_prob = tf.placeholder(tf.float32)
-
+        tf_dec_target_xy = tf.placeholder(tf.float32, [self.batch_size, self.decoder_time_size, 2])
         # init weights/bias
         # conv
         W_conv = []
@@ -62,13 +62,18 @@ class Seq2Seq:
                 if rnn_step_ind > 0:
                     scope.reuse_variables()
                     if self.teacher_forcing: ## feed in prediction
-                        raise NotImplementedError()
+                        ## output (BATCH, 2)
+                        output = output + tf_dec_target_xy[:, rnn_step_ind - 1]
+                        indices = tf.add(tf.scalar_mul(self.d2, output[:,0]),output[:,1])
+                        output = tf.one_hot(tf.cast(indices, tf.int32), self.d1*self.d2)
+                        output = tf.reshape(output, (self.batch_size, self.d1, self.d2))
+                        input_[:,:,:,0] = output
                     else:
-                        output = input_
+                        pass
                 else: ## first step, always feed-in gt
-                    output = input_
+                    pass
                 # conv
-                h_pool_drop = output
+                h_pool_drop = input_
                 for layer_ind in xrange(len(self.conv_layers)):
                     h_conv = tf.nn.relu(
                         conv2d(h_pool_drop, W_conv[layer_ind]) + b_conv[layer_ind])
@@ -110,24 +115,26 @@ if __name__ == '__main__':
     # ### figuring out how to use tf.one_hot
     # Y_RANGE = 3
     # X_RANGE = 2
-    # batch_size = 1
+    # batch_size = 5
     # previous_pred = tf.placeholder(tf.float32, [batch_size, 2])
     # indices = tf.add(tf.scalar_mul(X_RANGE, previous_pred[:,0]),previous_pred[:,1])
     # output = tf.one_hot(tf.cast(indices, tf.int32), Y_RANGE*X_RANGE)
-    # output = tf.reshape(output, (Y_RANGE,X_RANGE))
+    # output = tf.reshape(output, (batch_size,Y_RANGE,X_RANGE))
     # sess = tf.InteractiveSession()
-    # nout = sess.run(output, feed_dict={previous_pred:np.array([[2.1, 3]])})
+    # nout = sess.run(output, feed_dict={previous_pred:np.array([[2.1, 0]]).repeat(5,0)})
 
-    # raise
+    # # raise
 
     import yaml
     optimize_loss = tf.contrib.layers.optimize_loss
 
     f_model_config = 'config/seq2seq-1.yaml'
     model_config = yaml.load(open(f_model_config, 'rb'))['model_config']
+    model_config['keep_prob'] = 1
     ## Fake Data
     dec_input = np.random.rand(model_config['batch_size'], 4, model_config['decoder_time_size'], model_config['d1'], model_config['d2'] )
     dec_output = np.random.rand(model_config['batch_size'], model_config['decoder_time_size'], 2)
+    dec_target_sequence = np.random.rand(model_config['batch_size'], model_config['decoder_time_size'], 2) 
     ## Build Model    
     net = Seq2Seq(model_config)
     net.build()
@@ -148,6 +155,12 @@ if __name__ == '__main__':
     for train_step_ind in xrange(10):
         l = sess.run(train_step, feed_dict=feed_dict)
         print (l)
+    net.teacher_forcing = True
+    print ('.........')
+    for train_step_ind in xrange(10):
+        l = sess.run(train_step, feed_dict=feed_dict)
+        print (l)
+    
 
 
 
