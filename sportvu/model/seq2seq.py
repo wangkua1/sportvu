@@ -78,8 +78,9 @@ class Seq2Seq:
         ##
         # build decoder
         dec_outputs = []
-        initial_state = dec_cell.zero_state(self.batch_size, tf.float32) ## TODO: use encoder states
-        state = initial_state
+        # initial_state = dec_cell.zero_state(self.batch_size, tf.float32) ## TODO: use encoder states
+        # state = initial_state
+        state = end_states
         with tf.variable_scope("dec_rnn") as scope:
             for rnn_step_ind, input_ in enumerate(tf.unstack(tf.transpose(tf_dec_input, [2,0,3,4,1]))):
                 if rnn_step_ind > 0:
