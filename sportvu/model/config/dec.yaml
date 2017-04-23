@@ -6,3 +6,4 @@ model_config:
     batch_size: 64
     ## encoder
     encoder_input_shape: 
+    enc_rnn_hid_dim: 16
