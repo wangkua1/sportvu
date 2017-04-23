@@ -17,12 +17,14 @@ class EncDec:
         self.batch_size = config['batch_size']    
         self.decoder_time_size = config['decoder_time_size']
         self.dec_rnn_hid_dim = config['dec_rnn_hid_dim']
+        self.encoder_input_shape = config['encoder_input_shape']
 
     def build(self):
         # placeholders
         tf_dec_input = tf.placeholder(tf.float32, [self.batch_size, self.decoder_time_size, 2])
         keep_prob = tf.placeholder(tf.float32)
         self.teacher_forcing_stop = tf.placeholder(tf.int32)
+        
         # init weights/bias
         # dec pre-rnn
         self.W_dec_inp_hid = weight_variable([2, self.dec_rnn_hid_dim])
@@ -86,7 +88,7 @@ if __name__ == '__main__':
     import yaml
     optimize_loss = tf.contrib.layers.optimize_loss
 
-    f_model_config = 'config/dec.yaml'
+    f_model_config = 'config/dec-single-frame.yaml'
     model_config = yaml.load(open(f_model_config, 'rb'))['model_config']
     model_config['keep_prob'] = 1
     ## Fake Data

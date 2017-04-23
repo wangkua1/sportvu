@@ -489,6 +489,7 @@ class Seq2SeqLoader:
         x = self.val_x[self.val_ind:self.val_ind+self.batch_size]
         if extract:
             ret = self.extractor.extract_batch(x, input_is_sequence=True)
+        self.val_ind += self.batch_size
         return ret
 
     def reset(self):

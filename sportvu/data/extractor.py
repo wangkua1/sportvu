@@ -239,6 +239,71 @@ class Seq2SeqExtractor(BaseExtractor):
         enc_inp = seq_inp[:,:,:self.config['encoder_input_time']]
         dec_inp = seq_inp[:,:,self.config['encoder_input_time']:]
         return enc_inp, dec_inp, dec_target_sequence, output
+class EncDecExtractor(BaseExtractor):
+    """
+    """
+
+    def __init__(self, f_config):
+        super(self.__class__, self).__init__(f_config)
+
+    
+    def extract_batch(self, events_arr, input_is_sequence=False):
+        """
+        Say, enc_time = (10) 0-10
+             dec_time = (10) (11-10) - (20-19)
+             decoder_output = (10) (12-11)-(21-20)
+        """
+        sample_rate = 1
+        Y_RANGE = 100
+        X_RANGE = 50
+        if input_is_sequence:
+            sequences = events_arr
+        else:
+            sequences = np.array([make_3teams_11players(
+                self.extract_raw(e)) for e in events_arr])
+        # spatial jitter
+        if self.augment and np.sum(self.config['jitter']) > 0:
+            d0_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][0]
+            d1_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][1]
+            # hacky: can delete after -- temporary for malformed data (i.e.
+            # missing player)
+            try:
+                sequences[:, :, :, 0] += d0_jit
+            except:
+                raise ExtractorException()
+            sequences[:, :, :, 1] += d1_jit
+        ## temporal segment
+        target_player_ind = np.random.randint(1,6)
+        N_total_frames = sequences.shape[2]
+        start_time =  1+np.round((np.random.rand() * (N_total_frames - 
+                        (2+self.config['encoder_input_time']+self.config['decoder_input_time']))
+                        )).astype('int32') 
+        # input_seq = sequences[:, :, start_time:start_time+self.config['encoder_input_time']+self.config['decoder_input_time']]
+        # dec_target_sequence = sequences[:, target_player_ind, start_time+self.config['encoder_input_time']
+        #                          :start_time+self.config['encoder_input_time']+self.config['decoder_input_time']]
+        output_m1 =  sequences[:, target_player_ind, 
+                                  -1+start_time+self.config['encoder_input_time'] 
+                                 :1+start_time+self.config['encoder_input_time']+self.config['decoder_input_time']]
+        output = output_m1[:,2:] - output_m1[:,1:-1]
+        dec_input = output_m1[:,1:-1] - output_m1[:,:-2]
+        ##
+        # bctxy = pictorialize_fast(input_seq, sample_rate, Y_RANGE, X_RANGE, keep_channels=True)        
+        # if self.augment and self.config['d0flip'] and np.random.rand > .5:
+        #     bctxy = bctxy[:, :, :, ::-1]
+        # if self.augment and self.config['d1flip'] and np.random.rand > .5:
+        #     bctxy = bctxy[:, :, :, :, ::-1]
+        # seq_inp = np.zeros((bctxy.shape[0], 4, self.config['encoder_input_time']+self.config['decoder_input_time'], Y_RANGE, X_RANGE))
+        # #target player
+        # seq_inp[:,0] = bctxy[:,target_player_ind]
+        # #ball
+        # seq_inp[:,1] = bctxy[:,0]
+        # #team
+        # seq_inp[:,2] = np.concatenate([bctxy[:,1:target_player_ind], bctxy[:,target_player_ind+1:6]], axis=1).sum(1)
+        # #defense
+        # seq_inp[:,3] = bctxy[:,6:].sum(1)
+        # enc_inp = seq_inp[:,:,:self.config['encoder_input_time']]
+        # dec_inp = seq_inp[:,:,self.config['encoder_input_time']:]
+        return dec_input, output
 """
 HalfCourt Extractor
 This extractor takes the Event
@@ -259,16 +324,25 @@ ImagePyramid Extractor
 if __name__ == '__main__':
     from sportvu.data.dataset import BaseDataset
     from sportvu.data.extractor import BaseExtractor
-    from loader import BaseLoader
+    from loader import BaseLoader, Seq2SeqLoader
     ##
-    f_config = 'config/train_rev0.yaml'
+    # f_config = 'config/train_rev0.yaml'
+    # dataset = BaseDataset(f_config, 0)
+    # extractor = BaseExtractor(f_config)
+    # loader = BaseLoader(dataset, extractor, 35, fraction_positive=0)
+    # print ('testing next_batch')
+    # batch = loader.next_batch(extract=False)
+    # for eind, event in enumerate(batch[0]):
+    #     event.show('/home/wangkua1/Pictures/vis/%i.mp4' % eind)
+
+    f_config = 'config/rev3-dec-single-frame.yaml'
     dataset = BaseDataset(f_config, 0)
-    extractor = BaseExtractor(f_config)
-    loader = BaseLoader(dataset, extractor, 35, fraction_positive=0)
+    extractor = EncDecExtractor(f_config)
+    loader = Seq2SeqLoader(dataset, extractor, 100, fraction_positive=0)
     print ('testing next_batch')
-    batch = loader.next_batch(extract=False)
-    for eind, event in enumerate(batch[0]):
-        event.show('/home/wangkua1/Pictures/vis/%i.mp4' % eind)
+    batch = loader.next()
+    # for eind, event in enumerate(batch[0]):
+    #     event.show('/home/wangkua1/Pictures/vis/%i.mp4' % eind)
 
     # visualize model input
     # import  matplotlib.pyplot as plt

@@ -14,8 +14,8 @@ data_config:
     tfr: 50
     t_jitter: 0 ## in the scale of gameclock, which is seconds
     t_negative: 2 ## t_negative seconds away from annotation, in seconds
-batch_size: 32
-extractor_class: Seq2SeqExtractor
+batch_size: 64
+extractor_class: EncDecExtractor
 extractor_config:
     version: 3
     #augmentation (turned off when validating)
@@ -23,7 +23,5 @@ extractor_config:
     d1flip: True
     jitter: [3, 3]
     #parametrization
-    input_fov: 'full' # {'full', 'crop', 'hybrid'}
-    output_parametrization: 'xy' # {'xy', 'hpn'}
-    encoder_input_time: 1
-    decoder_input_time: 20
+    encoder_input_time: 0
+    decoder_input_time: 1

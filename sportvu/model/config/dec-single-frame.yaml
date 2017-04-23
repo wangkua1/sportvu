@@ -2,7 +2,6 @@ class_name: EncDec
 ### Dataset Configuration
 model_config: 
     dec_rnn_hid_dim: 16
-    decoder_time_size: 20
+    decoder_time_size: 1
     batch_size: 64
-    ## encoder
     encoder_input_shape: 
