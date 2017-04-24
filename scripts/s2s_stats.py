@@ -30,7 +30,7 @@ f_data_config = '../sportvu/data/config/rev3-ed-target-history.yaml'
 data_config = yaml.load(open(f_data_config, 'rb'))
 data_config['batch_size']  = 1
 # Initialize dataset/loader
-dataset = BaseDataset(data_config, 0, load_raw=True)
+dataset = BaseDataset(data_config, 0, load_raw=False)
 # extractor = Seq2SeqExtractor(data_config)
 extractor = EncDecExtractor(data_config)
 loader = Seq2SeqLoader(dataset, extractor, data_config[

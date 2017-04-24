@@ -77,36 +77,6 @@ class BaseDataset:
             self.train_annotations, self.val_annotations = disentangle_train_val(
                 self.train_annotations, self.val_annotations)
             self._make_annotation_dict()
-            # annotation only has Events with PNR
-            # need to find Events without PNR, split into train/val
-            #   for negatives examples
-            # Let's call these Events 'void'
-            # use gameclock = -1
-            self.voids = []  
-            for gameid in self.game_ids:
-                curr_game_events = self.games[gameid]['events']
-                for eid, event in enumerate(curr_game_events):
-                    if not eid in self.annotation_dict_eids[gameid][event['quarter']]:
-                        self.voids.append(self._make_annotation(
-                            gameid, event['quarter'], -1, eid))
-            self.train_voids, self.val_voids = self._split(
-                                        self.voids, fold_index)
-
-            # loader use below for detection task
-            # hash validation events
-            self.val_hash = {}
-            for va in self.val_annotations + self.val_voids:
-                k = _hash(va)
-                if k not in self.val_hash:
-                    self.val_hash[k] = []
-                self.val_hash[k].append(va)
-            # hash train events for mining hard examples
-            self.train_hash = {}
-            for va in self.train_annotations + self.train_voids:
-                k = _hash(va)
-                if k not in self.train_hash:
-                    self.train_hash[k] = []
-                self.train_hash[k].append(va)
             # hard negative examples
             ## WARNING: K-fold not supported here
             ##  user needs to make sure the following pkl
@@ -114,6 +84,37 @@ class BaseDataset:
             if 'hard-negatives' in self.config['data_config']:
                 self.hard_negatives = pickle.load(
                     open(data.constant.data_dir + self.config['data_config']['hard-negatives']))
+            if load_raw:
+                # annotation only has Events with PNR
+                # need to find Events without PNR, split into train/val
+                #   for negatives examples
+                # Let's call these Events 'void'
+                # use gameclock = -1
+                self.voids = []  
+                for gameid in self.game_ids:
+                    curr_game_events = self.games[gameid]['events']
+                    for eid, event in enumerate(curr_game_events):
+                        if not eid in self.annotation_dict_eids[gameid][event['quarter']]:
+                            self.voids.append(self._make_annotation(
+                                gameid, event['quarter'], -1, eid))
+                self.train_voids, self.val_voids = self._split(
+                                            self.voids, fold_index)
+
+                # loader use below for detection task
+                # hash validation events
+                self.val_hash = {}
+                for va in self.val_annotations + self.val_voids:
+                    k = _hash(va)
+                    if k not in self.val_hash:
+                        self.val_hash[k] = []
+                    self.val_hash[k].append(va)
+                # hash train events for mining hard examples
+                self.train_hash = {}
+                for va in self.train_annotations + self.train_voids:
+                    k = _hash(va)
+                    if k not in self.train_hash:
+                        self.train_hash[k] = []
+                    self.train_hash[k].append(va)
             
         self.val_ind = 0
         self.train_ind = 0

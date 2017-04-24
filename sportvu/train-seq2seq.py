@@ -50,7 +50,7 @@ import cPickle as pkl
 
 def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, testing=False):
     # Initialize dataset/loader
-    dataset = BaseDataset(data_config, fold_index, load_raw=True)
+    dataset = BaseDataset(data_config, fold_index, load_raw=False)
     extractor = eval(data_config['extractor_class'])(data_config)
     if 'negative_fraction_hard' in data_config:
         nfh = data_config['negative_fraction_hard']
@@ -59,7 +59,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
 
     loader = Seq2SeqLoader(dataset, extractor, data_config[
         'batch_size'], fraction_positive=0.5,
-        negative_fraction_hard=nfh)
+        negative_fraction_hard=nfh, move_N_neg_to_val=1000)
     Q_size = 100
     N_thread = 4
     # cloader = ConcurrentBatchIterator(
@@ -115,6 +115,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     update_v_rloss = tf.assign(v_rloss, v_rloss_pl)
     tf.summary.scalar('euclid_loss', euclid_loss)
     tf.summary.scalar('valid_loss', v_loss)
+    tf.summary.scalar('real_valid_loss', v_rloss)
     # tf.summary.image('encoder_input', tf.transpose(
     #     tf.reduce_sum(net.tf_enc_input, 2), (0, 2, 3, 1))[:,:,:,:-1], max_outputs=4)
     # tf.summary.image('decoder_input', tf.transpose(
@@ -215,18 +216,18 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             ## TODO: evaluate real-loss on training set
             val_tf_loss = np.mean(val_tf_loss)
             val_real_loss = np.mean(val_real_loss)
-            print ('[Iter: %g] Train Loss: %g, Validation TF Loss: %g | Real Loss: %g ' %(iter_ind,truncated_mean(train_loss),val_tf_loss, val_real_loss))
+            print ('[Iter: %g] Train Loss: %g, Validation TF Loss: %g | Real Loss: %g ' %(iter_ind,np.mean(train_loss),val_tf_loss, val_real_loss))
             train_loss = []
             feed_dict[v_loss_pl] = val_tf_loss
             feed_dict[v_rloss_pl] = val_real_loss
             _,_, summary = sess.run([update_v_loss,update_v_rloss, merged], feed_dict=feed_dict)
             val_writer.add_summary(summary, iter_ind)
-            # if val_ce < best_val_ce:
-            #     best_not_updated = 0
-            #     p = os.path.join("./saves/", exp_name + '.ckpt.best')
-            #     print ('Saving Best Model to: %s' % p)
-            #     save_path = saver.save(sess, p)
-            #     best_val_ce = val_ce
+            if val_real_loss < best_val_real_loss:
+                best_not_updated = 0
+                p = os.path.join("./saves/", exp_name + '.ckpt.best')
+                print ('Saving Best Model to: %s' % p)
+                save_path = saver.save(sess, p)
+                best_val_real_loss = val_real_loss
         if iter_ind % 2000 == 0:
             save_path = saver.save(sess, os.path.join(
                 "./saves/", exp_name + '%d.ckpt' % iter_ind))

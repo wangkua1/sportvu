@@ -406,7 +406,8 @@ class SequenceLoader:
 
 class Seq2SeqLoader:
     def __init__(self, dataset, extractor, batch_size, mode='sample', 
-                fraction_positive=.5, negative_fraction_hard=0, use_filter_discontinuous=True):
+                fraction_positive=.5, negative_fraction_hard=0, 
+                use_filter_discontinuous=True, move_N_neg_to_val=0):
         """ 
         """
         self.negative_fraction_hard = negative_fraction_hard
@@ -444,6 +445,9 @@ class Seq2SeqLoader:
             self.neg_x = filter_discontinuous(self.neg_x)
             if self.negative_fraction_hard >0:
                 self.hard_neg_x = filter_discontinuous(self.hard_neg_x)
+        if move_N_neg_to_val>0:
+            self.val_x = np.concatenate([self.val_x, self.neg_x[:move_N_neg_to_val]], axis=0)
+            self.neg_x = self.neg_x[move_N_neg_to_val:]
 
 
     def next(self):

@@ -46,7 +46,7 @@ import gc
 
 def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, testing=False):
     # Initialize dataset/loader
-    dataset = BaseDataset(data_config, fold_index, load_raw=True)
+    dataset = BaseDataset(data_config, fold_index, load_raw=False)
     extractor = BaseExtractor(data_config)
     if 'negative_fraction_hard' in data_config:
         nfh = data_config['negative_fraction_hard']
