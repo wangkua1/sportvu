@@ -1,4 +1,4 @@
-node1: &batch_size 32
+node1: &batch_size 64
 
 
 class_name: EncDec

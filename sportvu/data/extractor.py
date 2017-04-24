@@ -6,7 +6,7 @@ from sportvu import data
 import numpy as np
 import yaml
 from utils import (pictorialize_team, pictorialize_fast, 
-                make_3teams_11players, make_reference)
+                make_3teams_11players, make_reference, scale_last_dim)
 game_dir = data.constant.game_dir
 
 
@@ -278,32 +278,40 @@ class EncDecExtractor(BaseExtractor):
         start_time =  1+np.round((np.random.rand() * (N_total_frames - 
                         (2+self.config['encoder_input_time']+self.config['decoder_input_time']))
                         )).astype('int32') 
-        # input_seq = sequences[:, :, start_time:start_time+self.config['encoder_input_time']+self.config['decoder_input_time']]
-        # dec_target_sequence = sequences[:, target_player_ind, start_time+self.config['encoder_input_time']
-        #                          :start_time+self.config['encoder_input_time']+self.config['decoder_input_time']]
-        output_m1 =  sequences[:, target_player_ind, 
+        input_seq_m1 = np.array(sequences,copy=True)[:, :, start_time-1:start_time+self.config['encoder_input_time']]
+        output_m1 =  np.array(sequences,copy=True)[:, target_player_ind, 
                                   -1+start_time+self.config['encoder_input_time'] 
                                  :1+start_time+self.config['encoder_input_time']+self.config['decoder_input_time']]
         output = output_m1[:,2:] - output_m1[:,1:-1]
         dec_input = output_m1[:,1:-1] - output_m1[:,:-2]
-        ##
-        # bctxy = pictorialize_fast(input_seq, sample_rate, Y_RANGE, X_RANGE, keep_channels=True)        
-        # if self.augment and self.config['d0flip'] and np.random.rand > .5:
-        #     bctxy = bctxy[:, :, :, ::-1]
-        # if self.augment and self.config['d1flip'] and np.random.rand > .5:
-        #     bctxy = bctxy[:, :, :, :, ::-1]
-        # seq_inp = np.zeros((bctxy.shape[0], 4, self.config['encoder_input_time']+self.config['decoder_input_time'], Y_RANGE, X_RANGE))
-        # #target player
-        # seq_inp[:,0] = bctxy[:,target_player_ind]
-        # #ball
-        # seq_inp[:,1] = bctxy[:,0]
-        # #team
-        # seq_inp[:,2] = np.concatenate([bctxy[:,1:target_player_ind], bctxy[:,target_player_ind+1:6]], axis=1).sum(1)
-        # #defense
-        # seq_inp[:,3] = bctxy[:,6:].sum(1)
-        # enc_inp = seq_inp[:,:,:self.config['encoder_input_time']]
-        # dec_inp = seq_inp[:,:,self.config['encoder_input_time']:]
-        return dec_input, output
+        ## Encoder Input
+        if 'encoder_type' in self.config: 
+            if self.config['encoder_type'] == 'target-seq':
+                abs_seq = input_seq_m1[:, target_player_ind, 1:]
+                abs_seq = scale_last_dim(abs_seq)
+                m1_v_seq = input_seq_m1[:, target_player_ind, 1:] - input_seq_m1[:, target_player_ind, :-1]
+                enc_input = np.concatenate([abs_seq, m1_v_seq], axis=-1)
+                return dec_input, output, enc_input, (sequences[:, :, start_time:start_time+self.config['encoder_input_time']], target_player_ind)
+            elif self.config['encoder_type'] in ['3d', '2d']:
+                raise NotImplementedError()
+                # bctxy = pictorialize_fast(input_seq, sample_rate, Y_RANGE, X_RANGE, keep_channels=True)        
+                # if self.augment and self.config['d0flip'] and np.random.rand > .5:
+                #     bctxy = bctxy[:, :, :, ::-1]
+                # if self.augment and self.config['d1flip'] and np.random.rand > .5:
+                #     bctxy = bctxy[:, :, :, :, ::-1]
+                # seq_inp = np.zeros((bctxy.shape[0], 4, self.config['encoder_input_time']+self.config['decoder_input_time'], Y_RANGE, X_RANGE))
+                # #target player
+                # seq_inp[:,0] = bctxy[:,target_player_ind]
+                # #ball
+                # seq_inp[:,1] = bctxy[:,0]
+                # #team
+                # seq_inp[:,2] = np.concatenate([bctxy[:,1:target_player_ind], bctxy[:,target_player_ind+1:6]], axis=1).sum(1)
+                # #defense
+                # seq_inp[:,3] = bctxy[:,6:].sum(1)
+                # enc_inp = seq_inp[:,:,:self.config['encoder_input_time']]
+                # dec_inp = seq_inp[:,:,self.config['encoder_input_time']:]
+        else: #NO encoder
+            return dec_input, output, None, (sequences[:, :, start_time:start_time+self.config['encoder_input_time']], target_player_ind)
 """
 HalfCourt Extractor
 This extractor takes the Event

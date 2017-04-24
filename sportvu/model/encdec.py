@@ -24,6 +24,7 @@ class EncDec:
             self.fc_layers = config['fc_layers']
             if len(self.encoder_input_shape) == 5:
                 self.conv_layers = config['conv_layers']
+            self.keep_prob_value = config['keep_prob']
 
     def build(self):
         # placeholders
@@ -162,6 +163,8 @@ class EncDec:
             ret_dict[self.teacher_forcing_stop] = int(teacher_forcing_stop)
         if enc_input is not None:
             ret_dict[self.tf_enc_input] = enc_input
+            if enc_keep_prob is None:
+                enc_keep_prob = self.keep_prob_value
             ret_dict[self.keep_prob] = enc_keep_prob
         return ret_dict
 

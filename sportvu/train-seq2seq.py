@@ -41,7 +41,12 @@ from tqdm import tqdm
 from docopt import docopt
 import yaml
 import gc
-
+from utils import truncated_mean, experpolate_position
+from vis_utils import make_sequence_prediction_image
+import cPickle as pkl
+# import matplotlib.pylab as plt
+# plt.ioff()
+# fig = plt.figure()
 
 def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, testing=False):
     # Initialize dataset/loader
@@ -70,10 +75,16 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                          model_config['model_config']['decoder_time_size'],
                          2])
     learning_rate = tf.placeholder(tf.float32, [])
-    euclid_loss = tf.reduce_mean(tf.pow(net.output() - y_, 2))
+    # euclid_loss = tf.reduce_mean(tf.pow(net.output() - y_, 2))
+    euclid_loss = tf.reduce_mean(tf.pow(tf.reduce_sum(tf.pow(net.output() - y_, 2), axis=-1),.5))
+
     global_step = tf.Variable(0)
+    # train_step = optimize_loss(euclid_loss, global_step, learning_rate,
+    #                            optimizer=lambda lr: tf.train.AdamOptimizer(lr),
+    #                            clip_gradients=0.01)
     train_step = optimize_loss(euclid_loss, global_step, learning_rate,
-                               optimizer=lambda lr: tf.train.AdamOptimizer(lr))
+                               optimizer=lambda lr: tf.train.RMSPropOptimizer(lr),
+                               clip_gradients=0.01)
     # train_step = optimize_loss(cross_entropy, global_step, learning_rate,
     #             optimizer=lambda lr: tf.train.MomentumOptimizer(lr, .9))
 
@@ -134,24 +145,28 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     best_not_updated = 0
     lrv = init_lr
     tfs = model_config['model_config']['decoder_time_size']
+    train_loss = []
     for iter_ind in tqdm(range(max_iter)):
         best_not_updated += 1
         loaded = cloader.next()
         if loaded is not None:
-            dec_input, dec_output = loaded
+            dec_input, dec_output, enc_input,_= loaded
         else:
             cloader.reset()
             continue
-        # if iter_ind>0 and iter_ind % 10000 == 0:
-        #     tfs -= 5
-        feed_dict = net.input(dec_input, teacher_forcing_stop=1)
-        # feed_dict = net.input(dec_input, teacher_forcing_stop=np.max([1, tfs]))
+        if iter_ind>0 and iter_ind % 5000 == 0:
+            tfs -= 5
+        feed_dict = net.input(dec_input, 
+                                teacher_forcing_stop=np.max([1, tfs]),
+                                enc_input=enc_input
+                                )
         feed_dict[y_] = dec_output
-        # if iter_ind ==max_iter//2:
-        #     lrv *= .1
+        if iter_ind ==2000:
+            lrv *= .1
         feed_dict[learning_rate] = lrv
-        summary, _ = sess.run([merged, train_step], feed_dict=feed_dict)
-        # print (_)
+        summary, tl = sess.run([merged, train_step], feed_dict=feed_dict)
+        # print (tl)
+        train_loss.append(tl)
         train_writer.add_summary(summary, iter_ind)
         # Validate
         if iter_ind % 1000 == 0:
@@ -161,26 +176,47 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             while True:
                 loaded = cloader.load_valid()
                 if loaded is not None:
-                    dec_input, dec_output  = loaded
+                    dec_input, dec_output, enc_input, (meta)  = loaded
+                    history, pid = meta
                 else: ## done
                     # print ('...')
                     break
                 ## teacher-forced loss
-                feed_dict = net.input(dec_input)
+                feed_dict = net.input(dec_input, 
+                                teacher_forcing_stop=None,
+                                enc_input=enc_input,
+                                enc_keep_prob = 1.
+                                )
                 feed_dict[y_] = dec_output
                 val_loss = sess.run(euclid_loss, feed_dict = feed_dict)
                 val_tf_loss.append(val_loss)
                 ## real-loss
-                feed_dict = net.input(dec_input, teacher_forcing_stop=1)
+                feed_dict = net.input(dec_input, 
+                                teacher_forcing_stop=1,
+                                enc_input=enc_input,
+                                enc_keep_prob = 1.
+                                )
                 feed_dict[y_] = dec_output
                 val_loss = sess.run(euclid_loss, feed_dict = feed_dict)
                 val_real_loss.append(val_loss)
+                ### plot
+                pred = sess.run(net.output(), feed_dict = feed_dict)
+                gt_future = experpolate_position(history[:,pid,-1], dec_output)
+                pred_future = experpolate_position(history[:,pid,-1], pred)
+                # imgs = make_sequence_prediction_image(history, gt_future, pred_future, pid)
+                pkl.dump((history, gt_future, pred_future, pid),
+                          open(os.path.join("./logs/"+exp_name, 'iter-%g.pkl'%(iter_ind)),'wb'))
+
+                # for i in xrange(5):
+                #     plt.imshow(imgs[i])
+                #     plt.savefig(os.path.join("./saves/", exp_name +'iter-%g-%g.png'%(iter_ind,i)))
                 
                 
             ## TODO: evaluate real-loss on training set
             val_tf_loss = np.mean(val_tf_loss)
             val_real_loss = np.mean(val_real_loss)
-            print ('[Iter: %g] Validation TF Loss: %g | Real Loss: %g ' %(iter_ind,val_tf_loss, val_real_loss))
+            print ('[Iter: %g] Train Loss: %g, Validation TF Loss: %g | Real Loss: %g ' %(iter_ind,truncated_mean(train_loss),val_tf_loss, val_real_loss))
+            train_loss = []
             feed_dict[v_loss_pl] = val_tf_loss
             feed_dict[v_rloss_pl] = val_real_loss
             _,_, summary = sess.run([update_v_loss,update_v_rloss, merged], feed_dict=feed_dict)

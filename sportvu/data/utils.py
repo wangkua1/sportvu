@@ -1,3 +1,4 @@
+from __future__ import division
 import numpy as np
 
 
@@ -8,6 +9,13 @@ def shuffle_2_array(x, y):
     y = y[randomize]
     return x, y
 
+def scale_last_dim(s, d1_range=100,d2_range=50,upscale=False):
+    if upscale:
+        d1_range = 1/d1_range
+        d2_range = 1/d2_range
+    s[...,0] = s[...,0] / d1_range
+    s[...,1] = s[...,1] / d2_range
+    return s
 
 def create_circle(radius):
     r_squared = np.arange(-radius, radius + 1)**2
@@ -100,15 +108,15 @@ def pictorialize_fast(xx, sample_rate=1, Y_RANGE=100, X_RANGE=50, keep_channels=
 
     Y_RANGE = Y_RANGE / sample_rate
     X_RANGE = X_RANGE / sample_rate
-    target_shape = (  # B, P, T, Y, X
-        old_shape[0], 11, old_shape[2], Y_RANGE, X_RANGE)
+    target_shape = np.array((  # B, P, T, Y, X
+            old_shape[0], 11, old_shape[2], Y_RANGE, X_RANGE)).astype('int32')
     target = np.zeros(target_shape)
 
     nr_xx = xx.reshape(-1, xx.shape[-1])
     nr_target = target.reshape(-1, target.shape[-2], target.shape[-1])
     # fill it up
     ind0 = np.arange(nr_target.shape[0]).astype('int32')
-    nr_target[ind0, nr_xx[:, 0] / sample_rate, nr_xx[:, 1] / sample_rate] = 1.
+    nr_target[ind0, nr_xx[:, 0] // sample_rate, nr_xx[:, 1] // sample_rate] = 1.
     target = nr_target.reshape(target_shape)
     target = np.rollaxis(target, 1, 2)
     if keep_channels:
