@@ -41,7 +41,8 @@ with open(os.path.join(new_root, 'config.yaml'), 'w') as outfile:
     yaml.dump(data_config, outfile)
 
 
-for fold_index in tqdm(xrange(data_config['data_config']['N_folds'])):
+# for fold_index in tqdm(xrange(data_config['data_config']['N_folds'])):
+for fold_index in tqdm(xrange(1)): ## I have never actually used more than 1 fold...
     curr_folder = os.path.join(new_root, '%i' % fold_index)
     if not os.path.exists(curr_folder):
         os.makedirs(curr_folder)

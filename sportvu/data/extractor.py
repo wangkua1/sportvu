@@ -291,7 +291,8 @@ class EncDecExtractor(BaseExtractor):
                 abs_seq = scale_last_dim(abs_seq)
                 m1_v_seq = input_seq_m1[:, target_player_ind, 1:] - input_seq_m1[:, target_player_ind, :-1]
                 enc_input = np.concatenate([abs_seq, m1_v_seq], axis=-1)
-                return dec_input, output, enc_input, (sequences[:, :, start_time:start_time+self.config['encoder_input_time']], target_player_ind)
+                return dec_input, output, enc_input, (sequences[:, :, start_time:start_time+self.config['encoder_input_time']], target_player_ind#)
+                        , sequences[:, :, start_time+self.config['encoder_input_time']:start_time+self.config['encoder_input_time']+self.config['decoder_input_time']])
             elif self.config['encoder_type'] in ['3d', '2d']:
                 raise NotImplementedError()
                 # bctxy = pictorialize_fast(input_seq, sample_rate, Y_RANGE, X_RANGE, keep_channels=True)        

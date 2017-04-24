@@ -1,5 +1,5 @@
 """make_processed_data.py
-
+OBSOLETE
 Usage:
     make_one_game.py <f_data_config> <new_data_dir> <n_batches>
     make_one_game.py <f_data_config> 

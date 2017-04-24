@@ -1,5 +1,5 @@
 """make_sequence_data.py
-
+OBSOLETE
 This prepare a dataset after only extraction, not preprocessing
 Th
 

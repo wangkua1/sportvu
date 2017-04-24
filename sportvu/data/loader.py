@@ -7,6 +7,7 @@ from sportvu.vis.Event import Event, EventException
 from sportvu.data.extractor import ExtractorException
 import numpy as np
 from utils import shuffle_2_array
+from sportvu.utils import filter_discontinuous
 game_dir = data.constant.game_dir
 data_dir = data.constant.data_dir
 
@@ -405,7 +406,7 @@ class SequenceLoader:
 
 class Seq2SeqLoader:
     def __init__(self, dataset, extractor, batch_size, mode='sample', 
-                fraction_positive=.5, negative_fraction_hard=0):
+                fraction_positive=.5, negative_fraction_hard=0, use_filter_discontinuous=True):
         """ 
         """
         self.negative_fraction_hard = negative_fraction_hard
@@ -437,6 +438,13 @@ class Seq2SeqLoader:
             self.N_neg = self.N_neg - self.N_hard_neg
             self.hard_neg_ind = 0
         self.val_ind = 0
+        if use_filter_discontinuous:
+            self.pos_x = filter_discontinuous(self.pos_x)
+            self.val_x = filter_discontinuous(self.val_x)
+            self.neg_x = filter_discontinuous(self.neg_x)
+            if self.negative_fraction_hard >0:
+                self.hard_neg_x = filter_discontinuous(self.hard_neg_x)
+
 
     def next(self):
         """
