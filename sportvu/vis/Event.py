@@ -1,9 +1,7 @@
 from Constant import Constant
 from Moment import Moment
 from Team import Team
-# import matplotlib.pyplot as plt
-# from matplotlib import animation
-# from matplotlib.patches import Circle, Rectangle, Arc
+plt = None
 from sportvu import data
 import numpy as np
 
@@ -27,7 +25,8 @@ class Event:
         self.gameid = gameid
         moments = event['moments']
         self.moments = [Moment(moment) for moment in moments]
-        self._resolve_home_basket()
+        if gameid != '':
+          self._resolve_home_basket()
         self.home_team_id = event['home']['teamid']
         home_players = event['home']['players']
         guest_players = event['visitor']['players']
@@ -112,6 +111,11 @@ class Event:
         return player_circles, ball_circle
 
     def show(self, save_path=''):
+        global plt
+        if plt is None:
+          import matplotlib.pyplot as plt
+          from matplotlib import animation
+          from matplotlib.patches import Circle, Rectangle, Arc
         # Leave some space for inbound passes
         ax = plt.axes(xlim=(Constant.X_MIN,
                             Constant.X_MAX),
@@ -135,7 +139,7 @@ class Event:
                                    horizontalalignment='center',
                                    verticalalignment='center', fontweight='bold')
                        for player in start_moment.players]
-
+        
         # Prepare table
         sorted_players = sorted(start_moment.players, key=lambda player: player.team.id)
         

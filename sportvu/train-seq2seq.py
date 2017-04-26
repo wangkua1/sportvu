@@ -128,6 +128,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     log_folder = os.path.join('./logs', exp_name)
 
     saver = tf.train.Saver()
+    best_saver = tf.train.Saver()
     sess = tf.InteractiveSession()
 
     # remove existing log folder for the same model.
@@ -186,7 +187,9 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 feed_dict = net.input(dec_input, 
                                 teacher_forcing_stop=None,
                                 enc_input=enc_input,
-                                enc_keep_prob = 1.
+                                enc_keep_prob = 1.,
+                                decoder_noise_level = 0.,
+                                decoder_input_keep_prob = 1.
                                 )
                 feed_dict[y_] = dec_output
                 val_loss = sess.run(euclid_loss, feed_dict = feed_dict)
@@ -195,7 +198,9 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 feed_dict = net.input(dec_input, 
                                 teacher_forcing_stop=1,
                                 enc_input=enc_input,
-                                enc_keep_prob = 1.
+                                enc_keep_prob = 1.,
+                                decoder_noise_level = 0.,
+                                decoder_input_keep_prob = 1.
                                 )
                 feed_dict[y_] = dec_output
                 val_loss = sess.run(euclid_loss, feed_dict = feed_dict)
@@ -226,7 +231,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 best_not_updated = 0
                 p = os.path.join("./saves/", exp_name + '.ckpt.best')
                 print ('Saving Best Model to: %s' % p)
-                save_path = saver.save(sess, p)
+                save_path = best_saver.save(sess, p)
                 best_val_real_loss = val_real_loss
         if iter_ind % 2000 == 0:
             save_path = saver.save(sess, os.path.join(

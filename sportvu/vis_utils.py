@@ -2,6 +2,38 @@
 from sportvu.data.utils import pictorialize_fast
 import numpy as np
 
+def make_sequence_sample_image(history_sequences, future_target_sequences, predicted_sequences, target_index):
+    """
+    similar to make_sequence_prediction_image,
+    but predicted_sequences are samples for the same instance
+
+    """
+    kwargs = {'sample_rate':1, 'Y_RANGE':100, 'X_RANGE':50, 'keep_channels':False}
+    ## (B, 11, T, 2)
+    context_vid = pictorialize_fast(history_sequences, **kwargs)
+    context_img = np.sum(context_vid, axis=2)
+    context_img[context_img>1] = 1 #(B,3,x,y)
+
+    def _pictorialize_single_sequence(seq, kwargs):
+        shape = list(seq.shape) #(B, T, 2)
+        shape.insert(1,11)
+        tmp = np.zeros((shape))
+        tmp[:,0]= seq
+        tmp_img = pictorialize_fast(tmp, **kwargs)
+        tmp_img = np.sum(tmp_img[:,0],axis=1) # (B, X, Y)
+        tmp_img[tmp_img>1] = 1
+        return tmp_img
+    pred_img = np.zeros(context_img.shape)
+    pred_img[:,0] =_pictorialize_single_sequence( history_sequences[:,target_index], kwargs)
+    pred_img[:,1] =_pictorialize_single_sequence( future_target_sequences, kwargs)
+    tmp = _pictorialize_single_sequence( predicted_sequences, kwargs)
+    tmp = tmp.sum(0)
+    tmp = tmp / tmp.max()
+    pred_img[:,2] =tmp[None]
+    ###
+    final_img = np.concatenate([context_img, pred_img], axis=-1)
+    return np.transpose(final_img, (0,2,3,1))
+
 def make_sequence_prediction_image(history_sequences, future_target_sequences, predicted_sequences, target_index):
     """
 

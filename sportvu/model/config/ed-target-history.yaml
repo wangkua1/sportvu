@@ -12,3 +12,4 @@ model_config:
     enc_rnn_hid_dim: 16
     keep_prob: 1.
     fc_layers: [16]
+    ## stochasticity

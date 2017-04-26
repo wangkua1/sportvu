@@ -129,6 +129,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     log_folder = os.path.join('./logs', exp_name)
 
     saver = tf.train.Saver()
+    best_saver = tf.train.Saver()
     sess = tf.InteractiveSession()
 
     # remove existing log folder for the same model.
@@ -183,7 +184,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 best_not_updated = 0
                 p = os.path.join("./saves/", exp_name + '.ckpt.best')
                 print ('Saving Best Model to: %s' % p)
-                save_path = saver.save(sess, p)
+                save_path = best_saver.save(sess, p)
                 best_val_ce = val_ce
         if iter_ind % 2000 == 0:
             save_path = saver.save(sess, os.path.join(

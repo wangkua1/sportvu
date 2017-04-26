@@ -25,11 +25,28 @@ class EncDec:
             if len(self.encoder_input_shape) == 5:
                 self.conv_layers = config['conv_layers']
             self.keep_prob_value = config['keep_prob']
+        if "decoder_init_noise" in config: #stochasticity
+            self.decoder_init_noise = config['decoder_init_noise']
+            self.decoder_noise_level  = config['noise_level']
+        else:
+            self.decoder_init_noise = None
+            self.decoder_noise_level = None
+        if "decoder_input_keep_prob" in config:
+            self.decoder_input_keep_prob = config['decoder_input_keep_prob']
+        else:
+            self.decoder_input_keep_prob = None
 
     def build(self):
         # placeholders
         tf_dec_input = tf.placeholder(tf.float32, [self.batch_size, self.decoder_time_size, 2])
         keep_prob = tf.placeholder(tf.float32)
+        if self.decoder_init_noise is not None:
+            self.pl_decoder_noise_level = tf.placeholder(tf.float32, [])
+        if self.decoder_input_keep_prob is not None:
+            self.pl_decoder_input_keep_prob = tf.placeholder(tf.float32, [])
+        else:
+            self.pl_decoder_input_keep_prob = tf.constant(1.)
+
         self.teacher_forcing_stop = tf.placeholder(tf.int32)
         tf_enc_input = tf.placeholder(tf.float32, self.encoder_input_shape) ## either (N, T, D), or (N, C, T, Y, X)
         # init weights/bias
@@ -126,6 +143,18 @@ class EncDec:
             state = (s1,s2)
         else:
             state = dec_cell.zero_state(self.batch_size, tf.float32) 
+        # stochasticity
+        if self.decoder_init_noise is not None:
+            if self.decoder_init_noise == 'gaussian':
+                s0=gaussian_noise_layer(state[0], self.pl_decoder_noise_level)
+                s1=gaussian_noise_layer(state[1], self.pl_decoder_noise_level)
+                state = (s0,s1)
+            elif self.decoder_init_noise == 'dropout':
+                s0 = tf.nn.dropout(state[0], tf.constant(1.) - self.pl_decoder_noise_level)
+                s1 = tf.nn.dropout(state[1], tf.constant(1.) - self.pl_decoder_noise_level)
+                state = (s0, s1)
+            else:
+                raise NotImplementedError()
         with tf.variable_scope("dec_rnn") as scope:
             for rnn_step_ind, input_ in enumerate(tf.unstack(tf.transpose(tf_dec_input, [1,0,2]))):
                 if rnn_step_ind > 0:
@@ -134,6 +163,7 @@ class EncDec:
                     ## select
                     tf_step_ind = tf.Variable(rnn_step_ind)
                     input_ = tf.where(tf.greater_equal(tf_step_ind, self.teacher_forcing_stop),  output, input_)
+                    input_ = tf.nn.dropout(input_, self.pl_decoder_input_keep_prob)
                 else: ## first step, always feed-in gt
                     pass
                 h_fc = tf.nn.relu(tf.matmul(input_, self.W_dec_inp_hid) + self.b_dec_inp_hid)
@@ -150,7 +180,8 @@ class EncDec:
         self.keep_prob = keep_prob
         self.outputs = tf.transpose(dec_outputs, [1,0,2]) # -> (BATCH, TIME, 2)
 
-    def input(self, dec_input, teacher_forcing_stop = None, enc_input=None, enc_keep_prob=None):
+    def input(self, dec_input, teacher_forcing_stop = None, 
+                enc_input=None, enc_keep_prob=None,decoder_noise_level=None, decoder_input_keep_prob=None):
         # if keep_prob == None: #default, 'training'
         #     keep_prob = self.value_keep_prob
         ret_dict = {}
@@ -166,6 +197,15 @@ class EncDec:
             if enc_keep_prob is None:
                 enc_keep_prob = self.keep_prob_value
             ret_dict[self.keep_prob] = enc_keep_prob
+        if decoder_noise_level is None:
+            ret_dict[self.pl_decoder_noise_level] = self.decoder_noise_level
+        else:
+            ret_dict[self.pl_decoder_noise_level] = decoder_noise_level
+        if self.decoder_input_keep_prob is not None:
+            if decoder_input_keep_prob is None:
+                ret_dict[self.pl_decoder_input_keep_prob] = self.decoder_input_keep_prob
+            else:
+                ret_dict[self.pl_decoder_input_keep_prob] = decoder_input_keep_prob
         return ret_dict
 
     def output(self):

@@ -293,24 +293,26 @@ class EncDecExtractor(BaseExtractor):
                 enc_input = np.concatenate([abs_seq, m1_v_seq], axis=-1)
                 return dec_input, output, enc_input, (sequences[:, :, start_time:start_time+self.config['encoder_input_time']], target_player_ind)
                         # , sequences[:, :, start_time+self.config['encoder_input_time']:start_time+self.config['encoder_input_time']+self.config['decoder_input_time']])
-            elif self.config['encoder_type'] in ['3d', '2d']:
-                raise NotImplementedError()
-                # bctxy = pictorialize_fast(input_seq, sample_rate, Y_RANGE, X_RANGE, keep_channels=True)        
+            elif self.config['encoder_type'] in ['3d', '2d']:  
+                bctxy = pictorialize_fast(input_seq_m1, sample_rate, Y_RANGE, X_RANGE, keep_channels=True)        
                 # if self.augment and self.config['d0flip'] and np.random.rand > .5:
                 #     bctxy = bctxy[:, :, :, ::-1]
                 # if self.augment and self.config['d1flip'] and np.random.rand > .5:
                 #     bctxy = bctxy[:, :, :, :, ::-1]
-                # seq_inp = np.zeros((bctxy.shape[0], 4, self.config['encoder_input_time']+self.config['decoder_input_time'], Y_RANGE, X_RANGE))
-                # #target player
-                # seq_inp[:,0] = bctxy[:,target_player_ind]
-                # #ball
-                # seq_inp[:,1] = bctxy[:,0]
-                # #team
-                # seq_inp[:,2] = np.concatenate([bctxy[:,1:target_player_ind], bctxy[:,target_player_ind+1:6]], axis=1).sum(1)
-                # #defense
-                # seq_inp[:,3] = bctxy[:,6:].sum(1)
-                # enc_inp = seq_inp[:,:,:self.config['encoder_input_time']]
-                # dec_inp = seq_inp[:,:,self.config['encoder_input_time']:]
+                seq_inp = np.zeros((bctxy.shape[0], 4, input_seq_m1.shape[2], Y_RANGE, X_RANGE))
+                #target player
+                seq_inp[:,0] = bctxy[:,target_player_ind]
+                #ball
+                seq_inp[:,1] = bctxy[:,0]
+                #team
+                seq_inp[:,2] = np.concatenate([bctxy[:,1:target_player_ind], bctxy[:,target_player_ind+1:6]], axis=1).sum(1)
+                #defense
+                seq_inp[:,3] = bctxy[:,6:].sum(1)
+                if self.config['encoder_type'] == '2d':
+                    seq_inp = seq_inp.sum(2)[None]
+                    seq_inp = np.transpose(seq_inp, (1,2,0,3,4))
+                seq_inp[seq_inp>1] = 1
+                return dec_input, output, seq_inp, (sequences[:, :, start_time:start_time+self.config['encoder_input_time']], target_player_ind)
         else: #NO encoder
             return dec_input, output, None, (sequences[:, :, start_time:start_time+self.config['encoder_input_time']], target_player_ind)
 """
