@@ -1,3 +1,4 @@
+from __future__ import division
 from Constant import Constant
 from Moment import Moment
 from Team import Team
@@ -91,7 +92,18 @@ class Event:
           raise EventException('incorrect length')
         self.moments = self.moments[start_ind:end_ind]
 
-    def update_radius(self, i, player_circles, ball_circle, annotations, clock_info):
+    def update_radius(self, i, player_circles, ball_circle, annotations, clock_info, lines, pred_lines):
+        line = lines[0]
+        ret = [player_circles, ball_circle, line]
+        if i in self.futures[0]:
+          frame_ind = self.futures[0].index(i)
+          for sample_idx, l in enumerate(pred_lines):
+            l.set_ydata(self.futures[2][frame_ind, sample_idx,:,1])
+            l.set_xdata(self.futures[2][frame_ind, sample_idx,:,0])
+            ret.append(l)
+          line.set_ydata(self.futures[1][frame_ind, :, 1])
+          line.set_xdata(self.futures[1][frame_ind, :, 0])
+          
         moment = self.moments[i]
         for j, circle in enumerate(player_circles):
             try:
@@ -108,14 +120,20 @@ class Event:
             clock_info.set_text(clock_test)
         ball_circle.center = moment.ball.x, moment.ball.y
         ball_circle.radius = moment.ball.radius / Constant.NORMALIZATION_COEF
-        return player_circles, ball_circle
+        x = np.arange(Constant.X_MIN, Constant.X_MAX, 1)
+        court_center_x = Constant.X_MAX /2
+        court_center_y = Constant.Y_MAX /2
+        player_of_interest = moment.players[7]
+            
+        return ret
 
-    def show(self, save_path=''):
+    def show(self, save_path='', futures=None):
         global plt
         if plt is None:
           import matplotlib.pyplot as plt
           from matplotlib import animation
           from matplotlib.patches import Circle, Rectangle, Arc
+          import cPickle as pkl
         # Leave some space for inbound passes
         ax = plt.axes(xlim=(Constant.X_MIN,
                             Constant.X_MAX),
@@ -139,7 +157,15 @@ class Event:
                                    horizontalalignment='center',
                                    verticalalignment='center', fontweight='bold')
                        for player in start_moment.players]
-        
+        x = np.arange(Constant.X_MIN, Constant.X_MAX, 1)
+        if futures is not None:
+          self.futures = futures
+        pred_lines = []
+        for _ in range(self.futures[2].shape[1]):
+          l, = ax.plot([],[], color='k', alpha=1./self.futures[2].shape[1])
+          pred_lines.append(l)
+        line, = ax.plot([], [], color='w')
+
         # Prepare table
         sorted_players = sorted(start_moment.players, key=lambda player: player.team.id)
         
@@ -183,7 +209,7 @@ class Event:
 
         anim = animation.FuncAnimation(
                          fig, self.update_radius,
-                         fargs=(player_circles, ball_circle, annotations, clock_info),
+                         fargs=(player_circles, ball_circle, annotations, clock_info, [line], pred_lines),
                          frames=len(self.moments), interval=Constant.INTERVAL)
         court = plt.imread(data.constant.court_path)
         plt.imshow(court, zorder=0, extent=[Constant.X_MIN, Constant.X_MAX - Constant.DIFF,

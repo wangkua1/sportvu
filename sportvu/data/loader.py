@@ -164,6 +164,38 @@ class BaseLoader:
     def load_valid(self, extract=True, positive_only=False):
         return self.load_split(split='val', extract=extract, positive_only=positive_only)
 
+    def _load_event(self, event_id, game_id, extract, every_K_frame, player_id=None, dont_resolve_basket=False):
+        ret_val = []
+        ret_gameclocks = []
+        ret_frame_idx = []
+        e = Event(self.dataset.games[game_id]['events'][
+            event_id], gameid=game_id)
+        N_moments = len(e.moments)
+        for i in xrange(0, N_moments, every_K_frame):
+            try:
+                e = Event(self.dataset.games[game_id]['events'][
+                          event_id], gameid=game_id)
+                game_clock = e.moments[i].game_clock
+                e.sequence_around_t(
+                    game_clock, self.dataset.tfr)  # EventException
+                # just to make sure event not malformed (like
+                # missing player)
+                _ = self.extractor.extract_raw(e)
+                ret_val.append(e)
+                ret_gameclocks.append(game_clock)
+                ret_frame_idx.append(i)
+            except EventException as exc:
+                continue
+            except ExtractorException as exc:
+                continue
+        if len(ret_val) == 0:  # malformed Event
+            ret = 0
+        else:
+            if extract:
+                ret_val = self.extractor.extract_batch(ret_val, player_id=player_id,dont_resolve_basket=dont_resolve_basket)
+            ret = [ret_val, ret_gameclocks, ret_frame_idx]
+        return ret
+
     def load_split_event(self, split, extract, every_K_frame=4):
         if split == 'val':
             split_hash = self.dataset.val_hash
@@ -175,39 +207,30 @@ class BaseLoader:
             self.event_index = 0
             return None
         vh = split_hash.values()[self.event_index]
-        ret_val = []
-        ret_labels = filter(lambda t:t!=-1, [i['gameclock'] for i in vh])
-        ret_gameclocks = []
+
+        ret_labels = filter(lambda t: t != -1, [i['gameclock'] for i in vh])
         self.extractor.augment = False
-        e = Event(self.dataset.games[vh[0]['gameid']]['events'][
-                          vh[0]['eid']], gameid=vh[0]['gameid'])
-        N_moments = len(e.moments)
-        for i in xrange(0, N_moments,every_K_frame):
-            try:
-                e = Event(self.dataset.games[vh[0]['gameid']]['events'][
-                          vh[0]['eid']], gameid=vh[0]['gameid'])
-                game_clock = e.moments[i].game_clock
-                e.sequence_around_t(
-                    game_clock, self.dataset.tfr)  # EventException
-                # just to make sure event not malformed (like
-                # missing player)
-                _ = self.extractor.extract_raw(e)
-                ret_val.append(e)
-                ret_gameclocks.append(game_clock)
-            except EventException as exc:
-                continue
-            except ExtractorException as exc:
-                continue
-        if len(ret_val) == 0: # malformed Event
+        event_id = vh[0]['eid']
+        game_id = vh[0]['gameid']
+        ret = self._load_event(event_id, game_id, extract, every_K_frame)
+        if ret == 0:  # malformed Event
             ret = 0
         else:
-            if extract:
-                ret_val = self.extractor.extract_batch(ret_val)
+            ret_val, ret_gameclocks, ret_frame_idx = ret
             meta = [vh[0]['eid'], vh[0]['gameid']]
             ret = [ret_val, ret_labels, ret_gameclocks, meta]
         self.extractor.augment = True
         self.event_index += 1
         return ret
+
+    def load_event(self, game_id, event_id, every_K_frame, player_id=None):
+        o = self.extractor.augment
+        self.extractor.augment = False
+        ret = self._load_event(event_id, game_id, True, every_K_frame, player_id=player_id, dont_resolve_basket=True)
+        self.extractor.augment = o
+        return ret
+
+
 
     def reset(self):
         pass
@@ -314,8 +337,8 @@ class EventLoader:
 
 
 class SequenceLoader:
-    def __init__(self, dataset, extractor, batch_size, mode='sample', 
-                fraction_positive=.5, negative_fraction_hard=0):
+    def __init__(self, dataset, extractor, batch_size, mode='sample',
+                 fraction_positive=.5, negative_fraction_hard=0):
         """ 
         """
         self.negative_fraction_hard = negative_fraction_hard
@@ -333,16 +356,18 @@ class SequenceLoader:
         self.pos_t = np.load(os.path.join(self.root_dir, 'pos_t.npy'))
         # self.neg_t = np.load(os.path.join(self.root_dir, 'neg_t.npy'))
         self.neg_t = np.array([[1, 0]]).repeat(self.neg_x.shape[0], axis=0)
-        if self.negative_fraction_hard >0:
-            self.hard_neg_x = np.load(os.path.join(self.root_dir, 'hard_neg_x.npy'))
-            self.hard_neg_t = np.load(os.path.join(self.root_dir, 'hard_neg_t.npy'))
+        if self.negative_fraction_hard > 0:
+            self.hard_neg_x = np.load(os.path.join(
+                self.root_dir, 'hard_neg_x.npy'))
+            self.hard_neg_t = np.load(os.path.join(
+                self.root_dir, 'hard_neg_t.npy'))
         self.val_x = np.load(os.path.join(self.root_dir, 'vx.npy'))
         self.val_t = np.load(os.path.join(self.root_dir, 'vt.npy'))
         self.pos_ind = 0
         self.neg_ind = 0
         self.N_pos = int(batch_size * fraction_positive)
         self.N_neg = batch_size - self.N_pos
-        if self.negative_fraction_hard >0:
+        if self.negative_fraction_hard > 0:
             self.N_hard_neg = int(self.N_neg * negative_fraction_hard)
             self.N_neg = self.N_neg - self.N_hard_neg
             self.hard_neg_ind = 0
@@ -366,10 +391,11 @@ class SequenceLoader:
         if self.neg_ind + self.N_neg >= self.neg_x.shape[0]:
             self.neg_ind = 0
             self.neg_x, self.neg_t = shuffle_2_array(self.neg_x, self.neg_t)
-        if (self.negative_fraction_hard>0 and 
-           self.hard_neg_ind + self.N_hard_neg >= self.hard_neg_x.shape[0]):
+        if (self.negative_fraction_hard > 0 and
+                self.hard_neg_ind + self.N_hard_neg >= self.hard_neg_x.shape[0]):
             self.hard_neg_ind = 0
-            self.hard_neg_x, self.hard_neg_t = shuffle_2_array(self.hard_neg_x, self.hard_neg_t)
+            self.hard_neg_x, self.hard_neg_t = shuffle_2_array(
+                self.hard_neg_x, self.hard_neg_t)
 
         s = list(self.pos_x.shape)
         s[0] = self.batch_size
@@ -377,19 +403,21 @@ class SequenceLoader:
         t = np.zeros((self.batch_size, 2))
         x[:self.N_pos] = self.pos_x[self.pos_ind:self.pos_ind + self.N_pos]
         t[:self.N_pos] = self.pos_t[self.pos_ind:self.pos_ind + self.N_pos]
-        if not self.negative_fraction_hard >0:
+        if not self.negative_fraction_hard > 0:
             x[self.N_pos:] = self.neg_x[self.neg_ind:self.neg_ind + self.N_neg]
             t[self.N_pos:] = self.neg_t[self.neg_ind:self.neg_ind + self.N_neg]
         else:
-            x[self.N_pos:self.N_pos+self.N_hard_neg] = self.hard_neg_x[self.hard_neg_ind:self.hard_neg_ind + self.N_hard_neg]
-            t[self.N_pos:self.N_pos+self.N_hard_neg] = self.hard_neg_t[self.hard_neg_ind:self.hard_neg_ind + self.N_hard_neg]
-            x[self.N_pos+self.N_hard_neg:] = self.neg_x[self.neg_ind:self.neg_ind + self.N_neg]
-            t[self.N_pos+self.N_hard_neg:] = self.neg_t[self.neg_ind:self.neg_ind + self.N_neg]
+            x[self.N_pos:self.N_pos + self.N_hard_neg] = self.hard_neg_x[
+                self.hard_neg_ind:self.hard_neg_ind + self.N_hard_neg]
+            t[self.N_pos:self.N_pos + self.N_hard_neg] = self.hard_neg_t[
+                self.hard_neg_ind:self.hard_neg_ind + self.N_hard_neg]
+            x[self.N_pos + self.N_hard_neg:] = self.neg_x[self.neg_ind:self.neg_ind + self.N_neg]
+            t[self.N_pos + self.N_hard_neg:] = self.neg_t[self.neg_ind:self.neg_ind + self.N_neg]
         if extract:
             x = self.extractor.extract_batch(x, input_is_sequence=True)
         self.pos_ind += self.N_pos
         self.neg_ind += self.N_neg
-        if self.negative_fraction_hard >0:
+        if self.negative_fraction_hard > 0:
             self.hard_neg_ind += self.N_hard_neg
         return x, t
 
@@ -405,9 +433,9 @@ class SequenceLoader:
 
 
 class Seq2SeqLoader:
-    def __init__(self, dataset, extractor, batch_size, mode='sample', 
-                fraction_positive=.5, negative_fraction_hard=0, 
-                use_filter_discontinuous=True, move_N_neg_to_val=0):
+    def __init__(self, dataset, extractor, batch_size, mode='sample',
+                 fraction_positive=.5, negative_fraction_hard=0,
+                 use_filter_discontinuous=True, move_N_neg_to_val=0):
         """ 
         """
         self.negative_fraction_hard = negative_fraction_hard
@@ -425,16 +453,18 @@ class Seq2SeqLoader:
         self.pos_t = np.load(os.path.join(self.root_dir, 'pos_t.npy'))
         # self.neg_t = np.load(os.path.join(self.root_dir, 'neg_t.npy'))
         self.neg_t = np.array([[1, 0]]).repeat(self.neg_x.shape[0], axis=0)
-        if self.negative_fraction_hard >0:
-            self.hard_neg_x = np.load(os.path.join(self.root_dir, 'hard_neg_x.npy'))
-            self.hard_neg_t = np.load(os.path.join(self.root_dir, 'hard_neg_t.npy'))
+        if self.negative_fraction_hard > 0:
+            self.hard_neg_x = np.load(os.path.join(
+                self.root_dir, 'hard_neg_x.npy'))
+            self.hard_neg_t = np.load(os.path.join(
+                self.root_dir, 'hard_neg_t.npy'))
         self.val_x = np.load(os.path.join(self.root_dir, 'vx.npy'))
         self.val_t = np.load(os.path.join(self.root_dir, 'vt.npy'))
         self.pos_ind = 0
         self.neg_ind = 0
         self.N_pos = int(batch_size * fraction_positive)
         self.N_neg = batch_size - self.N_pos
-        if self.negative_fraction_hard >0:
+        if self.negative_fraction_hard > 0:
             self.N_hard_neg = int(self.N_neg * negative_fraction_hard)
             self.N_neg = self.N_neg - self.N_hard_neg
             self.hard_neg_ind = 0
@@ -443,12 +473,12 @@ class Seq2SeqLoader:
             self.pos_x = filter_discontinuous(self.pos_x)
             self.val_x = filter_discontinuous(self.val_x)
             self.neg_x = filter_discontinuous(self.neg_x)
-            if self.negative_fraction_hard >0:
+            if self.negative_fraction_hard > 0:
                 self.hard_neg_x = filter_discontinuous(self.hard_neg_x)
-        if move_N_neg_to_val>0:
-            self.val_x = np.concatenate([self.val_x, self.neg_x[:move_N_neg_to_val]], axis=0)
+        if move_N_neg_to_val > 0:
+            self.val_x = np.concatenate(
+                [self.val_x, self.neg_x[:move_N_neg_to_val]], axis=0)
             self.neg_x = self.neg_x[move_N_neg_to_val:]
-
 
     def next(self):
         """
@@ -469,36 +499,37 @@ class Seq2SeqLoader:
         if self.neg_ind + self.N_neg >= self.neg_x.shape[0]:
             self.neg_ind = 0
             self.neg_x, self.neg_t = shuffle_2_array(self.neg_x, self.neg_t)
-        if (self.negative_fraction_hard>0 and 
-           self.hard_neg_ind + self.N_hard_neg >= self.hard_neg_x.shape[0]):
+        if (self.negative_fraction_hard > 0 and
+                self.hard_neg_ind + self.N_hard_neg >= self.hard_neg_x.shape[0]):
             self.hard_neg_ind = 0
-            self.hard_neg_x, self.hard_neg_t = shuffle_2_array(self.hard_neg_x, self.hard_neg_t)
+            self.hard_neg_x, self.hard_neg_t = shuffle_2_array(
+                self.hard_neg_x, self.hard_neg_t)
 
         s = list(self.pos_x.shape)
         s[0] = self.batch_size
         x = np.zeros(s)
         x[:self.N_pos] = self.pos_x[self.pos_ind:self.pos_ind + self.N_pos]
-        if not self.negative_fraction_hard >0:
+        if not self.negative_fraction_hard > 0:
             x[self.N_pos:] = self.neg_x[self.neg_ind:self.neg_ind + self.N_neg]
         else:
-            x[self.N_pos:self.N_pos+self.N_hard_neg] = self.hard_neg_x[self.hard_neg_ind:self.hard_neg_ind + self.N_hard_neg]
-            x[self.N_pos+self.N_hard_neg:] = self.neg_x[self.neg_ind:self.neg_ind + self.N_neg]
+            x[self.N_pos:self.N_pos + self.N_hard_neg] = self.hard_neg_x[
+                self.hard_neg_ind:self.hard_neg_ind + self.N_hard_neg]
+            x[self.N_pos + self.N_hard_neg:] = self.neg_x[self.neg_ind:self.neg_ind + self.N_neg]
         ###
-
 
         if extract:
             ret = self.extractor.extract_batch(x, input_is_sequence=True)
         self.pos_ind += self.N_pos
         self.neg_ind += self.N_neg
-        if self.negative_fraction_hard >0:
+        if self.negative_fraction_hard > 0:
             self.hard_neg_ind += self.N_hard_neg
         return ret
-        
+
     def load_valid(self, extract=True):
-        if self.val_ind+self.batch_size > len(self.val_x):
+        if self.val_ind + self.batch_size > len(self.val_x):
             self.val_ind = 0
             return None
-        x = self.val_x[self.val_ind:self.val_ind+self.batch_size]
+        x = self.val_x[self.val_ind:self.val_ind + self.batch_size]
         if extract:
             ret = self.extractor.extract_batch(x, input_is_sequence=True)
         self.val_ind += self.batch_size

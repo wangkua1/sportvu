@@ -62,6 +62,16 @@ def make_sequence_prediction_image(history_sequences, future_target_sequences, p
     ###
     final_img = np.concatenate([context_img, pred_img], axis=-1)
     return np.transpose(final_img, (0,2,3,1))
+def repeat_first_dim_K_time(x, ind=0, K=100):
+    shape = [K] + [1 for i in range(len(x.shape)-1)]
+    return np.tile(x[ind:ind+1], shape)
+
+def compute_euclidean_variance(sequences):
+    """
+    (B, T+1, 2) -> 
+    """
+    mean = np.mean(sequences, axis=0)[None] #(1,T+1,2)
+    return np.power(np.power(sequences - np.repeat(mean, sequences.shape[0], axis=0),2).sum(-1),.5).mean()
 
 if __name__ == '__main__':
     f_data_config = 'data/config/rev3-ed-target-history.yaml'

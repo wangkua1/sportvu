@@ -1,0 +1,8 @@
+##helper
+tmp_pkl: 'tmp_anim.pkl'
+##
+gameid: '0021500278'
+event_id: 12
+player_name: "Emmanuel Mudiay"
+every_K_frame: 5
+n_samples: 10

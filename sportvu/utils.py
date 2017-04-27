@@ -44,4 +44,3 @@ def filter_discontinuous(seqs, mean_diff_thresh=2.):
     else:
         return seqs[arr]
 
-    

@@ -35,7 +35,7 @@ class BaseExtractor(object):
         else:
             self.config = f_config['extractor_config']
             
-    def extract_raw(self, event):
+    def extract_raw(self, event, dont_resolve_basket=False):
         """
         """
         ##
@@ -46,13 +46,21 @@ class BaseExtractor(object):
         for moment in moments:
             ball[0].append([moment.ball.x, moment.ball.y])
             off_id, def_id = 0, 0
-            for player in moment.players:
-                if (player.team.id == event.home_team_id) == off_is_home:  # offense
-                    offense[off_id].append([player.x, player.y])
-                    off_id += 1
-                else:  # defense
-                    defense[def_id].append([player.x, player.y])
-                    def_id += 1
+            for player_idx, player in enumerate(moment.players):
+                if dont_resolve_basket:
+                    if player_idx < 5:
+                        offense[off_id].append([player.x, player.y])
+                        off_id += 1
+                    else:
+                        defense[def_id].append([player.x, player.y])
+                        def_id += 1
+                else:
+                    if (player.team.id == event.home_team_id) == off_is_home:  # offense
+                        offense[off_id].append([player.x, player.y])
+                        off_id += 1
+                    else:  # defense
+                        defense[def_id].append([player.x, player.y])
+                        def_id += 1
         if ( len(ball) == 0 or
             (not ((len(np.array(ball).shape) == 3
                  and len(np.array(offense).shape) == 3
@@ -111,7 +119,7 @@ class BaseExtractor(object):
                 cxy = cxy[:, :, ::-1]
             return cxy
 
-    def extract_batch(self, events_arr, input_is_sequence=False):
+    def extract_batch(self, events_arr, input_is_sequence=False, dont_resolve_basket=False):
         sample_rate = 1
         Y_RANGE = 100
         X_RANGE = 50
@@ -119,7 +127,7 @@ class BaseExtractor(object):
             sequences = events_arr
         else:
             sequences = np.array([make_3teams_11players(
-                self.extract_raw(e)) for e in events_arr])
+                self.extract_raw(e,dont_resolve_basket=dont_resolve_basket)) for e in events_arr])
         # time crop (+jitter) , spatial crop
         if 'version' in self.config and self.config['version'] >= 2:
             if self.augment:
@@ -183,7 +191,7 @@ class Seq2SeqExtractor(BaseExtractor):
         super(self.__class__, self).__init__(f_config)
 
     
-    def extract_batch(self, events_arr, input_is_sequence=False):
+    def extract_batch(self, events_arr, input_is_sequence=False, dont_resolve_basket=False):
         """
         Say, enc_time = (10) 0-10
              dec_time = (10) 11-20
@@ -197,7 +205,7 @@ class Seq2SeqExtractor(BaseExtractor):
             sequences = events_arr
         else:
             sequences = np.array([make_3teams_11players(
-                self.extract_raw(e)) for e in events_arr])
+                self.extract_raw(e,dont_resolve_basket=dont_resolve_basket)) for e in events_arr])
         # spatial jitter
         if self.augment and np.sum(self.config['jitter']) > 0:
             d0_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][0]
@@ -247,7 +255,7 @@ class EncDecExtractor(BaseExtractor):
         super(self.__class__, self).__init__(f_config)
 
     
-    def extract_batch(self, events_arr, input_is_sequence=False):
+    def extract_batch(self, events_arr, input_is_sequence=False, player_id=None, dont_resolve_basket=False):
         """
         Say, enc_time = (10) 0-10
              dec_time = (10) (11-10) - (20-19)
@@ -260,7 +268,7 @@ class EncDecExtractor(BaseExtractor):
             sequences = events_arr
         else:
             sequences = np.array([make_3teams_11players(
-                self.extract_raw(e)) for e in events_arr])
+                self.extract_raw(e, dont_resolve_basket=dont_resolve_basket)) for e in events_arr])
         # spatial jitter
         if self.augment and np.sum(self.config['jitter']) > 0:
             d0_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][0]
@@ -273,11 +281,17 @@ class EncDecExtractor(BaseExtractor):
                 raise ExtractorException()
             sequences[:, :, :, 1] += d1_jit
         ## temporal segment
-        target_player_ind = np.random.randint(1,6)
+        if player_id is None:
+            target_player_ind = np.random.randint(1,6)
+        else:
+            target_player_ind = player_id
         N_total_frames = sequences.shape[2]
-        start_time =  1+np.round((np.random.rand() * (N_total_frames - 
-                        (2+self.config['encoder_input_time']+self.config['decoder_input_time']))
-                        )).astype('int32') 
+        if self.augment:
+            start_time =  1+np.round((np.random.rand() * (N_total_frames - 
+                            (2+self.config['encoder_input_time']+self.config['decoder_input_time']))
+                            )).astype('int32') 
+        else:
+            start_time = N_total_frames // 2 - self.config['encoder_input_time']
         input_seq_m1 = np.array(sequences,copy=True)[:, :, start_time-1:start_time+self.config['encoder_input_time']]
         output_m1 =  np.array(sequences,copy=True)[:, target_player_ind, 
                                   -1+start_time+self.config['encoder_input_time'] 
