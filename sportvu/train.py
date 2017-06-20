@@ -1,7 +1,7 @@
 """train.py
 
 Usage:
-    train.py <fold_index> <f_data_config> <f_model_config> 
+    train.py <fold_index> <f_data_config> <f_model_config>
     train.py --test <fold_index> <f_data_config> <f_model_config>
 
 Arguments:
@@ -9,8 +9,7 @@ Arguments:
     <f_model_config> example 'model/config/conv2d-3layers.yaml'
 
 Example:
-    python train.py 0 data/config/train_rev0.yaml model/config/conv2d-3layers.yaml
-    python train.py 0 data/config/train_rev0_vid.yaml model/config/conv3d-1.yaml
+    python train.py 1 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25-bn.yaml
 Options:
     --negative_fraction_hard=<percent> [default: 0]
 """
@@ -35,8 +34,10 @@ from sportvu.model.convnet3d import ConvNet3d
 from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import BaseExtractor
 from sportvu.data.loader import PreprocessedLoader, EventLoader, SequenceLoader
+# configuration
+import config as CONFIG
 # concurrent
-from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
+# from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
 from tqdm import tqdm
 from docopt import docopt
 import yaml
@@ -87,9 +88,9 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
         tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=net.output()))
     # train_step = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
     global_step = tf.Variable(0)
-    # train_step = optimize_loss(cross_entropy, global_step, learning_rate, 
+    # train_step = optimize_loss(cross_entropy, global_step, learning_rate,
     #             optimizer=lambda lr: tf.train.AdamOptimizer(lr))
-    train_step = optimize_loss(cross_entropy, global_step, learning_rate, 
+    train_step = optimize_loss(cross_entropy, global_step, learning_rate,
                 optimizer=lambda lr: tf.train.MomentumOptimizer(lr, .9))
     correct_prediction = tf.equal(tf.argmax(net.output(), 1), tf.argmax(y_, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
@@ -99,7 +100,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     if testing:
         saver = tf.train.Saver()
         sess = tf.InteractiveSession()
-        ckpt_path = os.path.join("./saves/", exp_name + '.ckpt.best')
+        ckpt_path = '%s/%s.ckpt.best' % (CONFIG.saves.dir,exp_name)
         saver.restore(sess, ckpt_path)
 
         feed_dict = net.input(val_x, 1, False)
@@ -109,11 +110,11 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
         sys.exit(0)
 
     # checkpoints
-    if not os.path.exists('./saves'):
-        os.mkdir('./saves')
+    if not os.path.exists(CONFIG.saves.dir):
+        os.mkdir(CONFIG.saves.dir)
     # tensorboard
-    if not os.path.exists('./logs'):
-        os.mkdir('./logs')
+    if not os.path.exists(CONFIG.logs.dir):
+        os.mkdir(CONFIG.logs.dir)
     tf.summary.scalar('cross_entropy', cross_entropy)
     tf.summary.scalar('accuray', accuracy)
     if model_config['class_name'] == 'ConvNet2d':
@@ -126,7 +127,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     tf.summary.histogram('logits', net.logits)
 
     merged = tf.summary.merge_all()
-    log_folder = os.path.join('./logs', exp_name)
+    log_folder = '%s/%s' % (CONFIG.logs.dir,exp_name)
 
     saver = tf.train.Saver()
     best_saver = tf.train.Saver()
@@ -182,13 +183,12 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                   (iter_ind, train_accuracy, val_accuracy, val_ce))
             if val_ce < best_val_ce:
                 best_not_updated = 0
-                p = os.path.join("./saves/", exp_name + '.ckpt.best')
+                p = '%s/%s.ckpt.best' % (CONFIG.saves.dir, exp_name)
                 print ('Saving Best Model to: %s' % p)
                 save_path = best_saver.save(sess, p)
                 best_val_ce = val_ce
         if iter_ind % 2000 == 0:
-            save_path = saver.save(sess, os.path.join(
-                "./saves/", exp_name + '%d.ckpt' % iter_ind))
+            save_path = saver.save(sess,'%s/%s-%d.ckpt'%(CONFIG.saves.dir,exp_name,iter_ind))
         if best_not_updated == best_acc_delay:
             break
     return best_val_ce
@@ -199,8 +199,8 @@ if __name__ == '__main__':
     print ("...Docopt... ")
     print(arguments)
     print ("............\n")
-    f_data_config = arguments['<f_data_config>']
-    f_model_config = arguments['<f_model_config>']
+    f_data_config = '%s/%s' % (CONFIG.data.config.dir,arguments['<f_data_config>'])
+    f_model_config = '%s/%s' % (CONFIG.model.config.dir,arguments['<f_model_config>'])
 
 
     data_config = yaml.load(open(f_data_config, 'rb'))

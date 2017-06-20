@@ -23,6 +23,9 @@ import cPickle as pkl
 ##
 from sportvu.detect.running_window_p import RunWindowP
 from sportvu.detect.nms import NMS
+# configuration
+import config as CONFIG
+
 arguments = docopt(__doc__)
 print ("...Docopt... ")
 print(arguments)
@@ -42,7 +45,7 @@ detect_config = yaml.load(open(f_detect_config, 'rb'))
 detector = eval(detect_config['class'])(detect_config)
 
 
-plot_folder = os.path.join('./plots', exp_name)
+plot_folder = '%s/%s' % (CONFIG.plots.dir,exp_name)
 if not os.path.exists(plot_folder):
     raise Exception('Run test.py first to get raw predictions')
 
@@ -52,8 +55,8 @@ plt.figure()
 #     split = 'train'
 # else:
 split = 'val'
-all_pred_f = filter(lambda s:'.pkl' in s and split in s 
-                    and 'meta' not in s,os.listdir(os.path.join(plot_folder,'pkl')))
+all_pred_f = filter(lambda s:'.pkl' in s and split in s
+                    and 'meta' not in s,os.listdir('%s/pkl' % (plot_folder)))
 
 
 def PR(all_pred_f, detector):
@@ -62,7 +65,7 @@ def PR(all_pred_f, detector):
     intersect = 0
     for ind, f in tqdm(enumerate(all_pred_f)):
         gameclocks, pnr_probs, labels = pkl.load(
-            open(os.path.join(plot_folder, 'pkl/%i.pkl' % (ind)), 'rb'))
+            open('%s/pkl/%i.pkl' % (plot_folder, ind), 'rb'))
         cands = detector.detect(pnr_probs, gameclocks)
         for label in labels:
             label_detected = False
@@ -127,6 +130,5 @@ ax = fig.gca()
 ax.set_xticks(np.arange(0, 1, 0.1))
 ax.set_yticks(np.arange(0, 1., 0.1))
 plt.grid()
-plt.savefig(os.path.join(plot_folder, '%s-precision-recall.png' %
-                         detect_config['class']))
+plt.savefig('%s/%s-precision-recall.png'%(CONFIG.plots.dir,detect_config['class']))
 plt.clf()

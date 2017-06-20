@@ -5,6 +5,8 @@
 *mongod.lock
 *storage.bson
 *.out
+data/**
+.idea/**
 
 *.mp4
 *.pdf

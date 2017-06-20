@@ -5,16 +5,19 @@ Usage:
     test.py <fold_index> <f_data_config> <f_model_config> <every_K_frame>
 
 Arguments:
-    <f_data_config>  example ''data/config/train_rev0.yaml''
-    <f_model_config> example 'model/config/conv2d-3layers.yaml'
+    <f_data_config>  example 'train_rev0.yaml'
+    <f_model_config> example 'conv2d-3layers.yaml'
 
 Example:
+    python test.py 1 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml 5 --train
 """
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import numpy as np
+# configuration
+import config as CONFIG
 # model
 import tensorflow as tf
 import sys
@@ -43,8 +46,8 @@ print ("...Docopt... ")
 print(arguments)
 print ("............\n")
 
-f_data_config = arguments['<f_data_config>']
-f_model_config = arguments['<f_model_config>']
+f_data_config = '%s/%s' % (CONFIG.data.config.dir,arguments['<f_data_config>'])
+f_model_config = '%s/%s' % (CONFIG.model.config.dir,arguments['<f_model_config>'])
 # pre_trained = arguments['<pre_trained>']
 data_config = yaml.load(open(f_data_config, 'rb'))
 model_config = yaml.load(open(f_model_config, 'rb'))
@@ -75,14 +78,16 @@ correct_prediction = tf.equal(tf.argmax(net.output(), 1), tf.argmax(y_, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
 
-plot_folder = os.path.join('./plots', exp_name)
-if not os.path.exists(os.path.join(plot_folder,'pkl')):
-    os.makedirs(os.path.join(plot_folder,'pkl'))
+# plot_folder = os.path.join('./plots', exp_name)
+plot_folder = '%s/%s' % (CONFIG.plots.dir, exp_name)
+if not os.path.exists('%s/pkl'%(plot_folder)):
+    os.makedirs('%s/pkl'%(plot_folder))
 
-saver = tf.train.Saver()
+ckpt_path = '%s/%s.ckpt.best' % (CONFIG.saves.dir,exp_name)
+meta_path = ckpt_path + '.meta'
+saver = tf.train.import_meta_graph(meta_path)
 sess = tf.InteractiveSession()
-
-ckpt_path = os.path.join("./saves/", exp_name + '.ckpt.best')
+# ckpt_path = os.path.join("./saves/", exp_name + '.ckpt.best')
 # ckpt_path = os.path.join("./saves/", exp_name + '10000.ckpt')
 saver.restore(sess, ckpt_path)
 
@@ -119,9 +124,7 @@ while True:
     # plt.savefig(os.path.join(plot_folder, '%i.png' % ind))
     # plt.clf()
     # save the raw predictions
-    pkl.dump([gameclocks, probs[:, 1], labels], open(
-        os.path.join(plot_folder, 'pkl/%s-%i.pkl' %(split, ind)), 'w'))
+    pkl.dump([gameclocks, probs[:, 1], labels], open('%s/pkl/%s-%i.pkl'%(plot_folder,split, ind)), 'w'))
     if arguments['--train']:
-        pkl.dump(meta, open(
-            os.path.join(plot_folder, 'pkl/%s-meta-%i.pkl' %(split, ind)), 'w'))
+        pkl.dump(meta, open('%s/pkl/%s-meta-%i.pkl'%(plot_folder,split, ind), 'w'))
     ind += 1

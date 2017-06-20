@@ -2,12 +2,13 @@
 
 Usage:
     make_sequences_from_sportvu.py <f_data_config> --sample
-    make_sequences_from_sportvu.py <f_data_config> 
+    make_sequences_from_sportvu.py <f_data_config>
 
 Arguments:
-    <f_data_config>  example ''data/config/rev2.yaml''
+    <f_data_config>  example ''rev3_1-bmf-25x25.yaml''
 
 Example:
+    python make_sequences_from_sportvu.py rev3_1-bmf-25x25.yaml
 """
 from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import BaseExtractor
@@ -19,12 +20,15 @@ from docopt import docopt
 import yaml
 import numpy as np
 from sportvu.data.utils import make_3teams_11players
+# configuration
+import config as CONFIG
+
 arguments = docopt(__doc__)
 print ("...Docopt... ")
 print(arguments)
 print ("............\n")
 
-f_data_config = arguments['<f_data_config>']
+f_data_config = '%s/%s'%(CONFIG.data.config.dir,arguments['<f_data_config>'])
 data_config = yaml.load(open(f_data_config, 'rb'))
 
 # make a new data directions
