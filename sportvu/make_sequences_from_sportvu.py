@@ -74,7 +74,7 @@ for fold_index in tqdm(xrange(1)): ## I have never actually used more than 1 fol
         xs = []
         ind = 0
         while True:
-            print (ind)
+            print ('%i/%i' % (ind, len(dataset.train_hash)))
             print (len(xs))
             ind+=1
             loaded = loader.load_split_event('train',extract=False)

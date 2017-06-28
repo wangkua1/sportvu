@@ -9,7 +9,7 @@ Arguments:
     <f_model_config> example 'conv2d-3layers.yaml'
 
 Example:
-    python test.py 1 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml 5 --train
+    python test.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml 5
 """
 
 from __future__ import absolute_import
@@ -34,7 +34,7 @@ from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import BaseExtractor
 from sportvu.data.loader import BaseLoader
 # concurrent
-from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
+# from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
 from tqdm import tqdm
 from docopt import docopt
 import yaml
@@ -87,6 +87,7 @@ ckpt_path = '%s/%s.ckpt.best' % (CONFIG.saves.dir,exp_name)
 meta_path = ckpt_path + '.meta'
 saver = tf.train.import_meta_graph(meta_path)
 sess = tf.InteractiveSession()
+tf.global_variables_initializer().run()
 # ckpt_path = os.path.join("./saves/", exp_name + '.ckpt.best')
 # ckpt_path = os.path.join("./saves/", exp_name + '10000.ckpt')
 saver.restore(sess, ckpt_path)
@@ -124,7 +125,7 @@ while True:
     # plt.savefig(os.path.join(plot_folder, '%i.png' % ind))
     # plt.clf()
     # save the raw predictions
-    pkl.dump([gameclocks, probs[:, 1], labels], open('%s/pkl/%s-%i.pkl'%(plot_folder,split, ind)), 'w'))
+    pkl.dump([gameclocks, probs[:, 1], labels], open('%s/pkl/%s-%i.pkl'%(plot_folder,split, ind), 'w'))
     if arguments['--train']:
         pkl.dump(meta, open('%s/pkl/%s-meta-%i.pkl'%(plot_folder,split, ind), 'w'))
     ind += 1

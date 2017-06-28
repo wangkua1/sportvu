@@ -6,6 +6,7 @@ Usage:
 Arguments:
     <percent_grid> e.g. 5, prob_threshold = 0,5,10,15 ...
 Example:
+    python detection_pr.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml nms1.yaml 5 --single
 """
 
 from __future__ import absolute_import
@@ -31,9 +32,9 @@ print ("...Docopt... ")
 print(arguments)
 print ("............\n")
 
-f_data_config = arguments['<f_data_config>']
-f_model_config = arguments['<f_model_config>']
-f_detect_config = arguments['<f_detect_config>']
+f_data_config = '%s/%s' % (CONFIG.data.config.dir,arguments['<f_data_config>'])
+f_model_config = '%s/%s' % (CONFIG.model.config.dir,arguments['<f_model_config>'])
+f_detect_config = '%s/%s' % (CONFIG.detect.config.dir,arguments['<f_detect_config>'])
 # pre_trained = arguments['<pre_trained>']
 data_config = yaml.load(open(f_data_config, 'rb'))
 model_config = yaml.load(open(f_model_config, 'rb'))
@@ -64,8 +65,7 @@ def PR(all_pred_f, detector):
     retrieved = 0
     intersect = 0
     for ind, f in tqdm(enumerate(all_pred_f)):
-        gameclocks, pnr_probs, labels = pkl.load(
-            open('%s/pkl/%i.pkl' % (plot_folder, ind), 'rb'))
+        gameclocks, pnr_probs, labels = pkl.load(open('%s/pkl/%s' % (plot_folder, f), 'rb'))
         cands = detector.detect(pnr_probs, gameclocks)
         for label in labels:
             label_detected = False
@@ -94,8 +94,7 @@ elif detect_config['class'] == 'NMS':
 if arguments['--single']:
     ps = []
     rs = []
-    for prob_threshold in tqdm(xrange(0, 100,
-                                      int(arguments['<percent_grid>']))):
+    for prob_threshold in tqdm(xrange(0, 100, int(arguments['<percent_grid>']))):
         detector.config['prob_threshold'] = prob_threshold * .01
         precision, recall = PR(all_pred_f, detector)
         ps.append(precision)

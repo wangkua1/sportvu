@@ -9,7 +9,7 @@ Arguments:
     <f_model_config> example 'model/config/conv2d-3layers.yaml'
 
 Example:
-    python train.py 1 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25-bn.yaml
+    python train.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25-bn.yaml
 Options:
     --negative_fraction_hard=<percent> [default: 0]
 """
