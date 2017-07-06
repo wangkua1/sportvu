@@ -3,13 +3,14 @@
 Usage:
     train.py <fold_index> <f_data_config> <f_model_config>
     train.py --test <fold_index> <f_data_config> <f_model_config>
+    train.py --test  --train <fold_index> <f_data_config> <f_model_config>
 
 Arguments:
     <f_data_config>  example ''data/config/train_rev0.yaml''
     <f_model_config> example 'model/config/conv2d-3layers.yaml'
 
 Example:
-    python train.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25-bn.yaml
+    python train.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml --test --train
 Options:
     --negative_fraction_hard=<percent> [default: 0]
 """
@@ -33,16 +34,18 @@ from sportvu.model.convnet3d import ConvNet3d
 # data
 from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import BaseExtractor
-from sportvu.data.loader import PreprocessedLoader, EventLoader, SequenceLoader
+from sportvu.data.loader import PreprocessedLoader, EventLoader, SequenceLoader, BaseLoader
 # configuration
 import config as CONFIG
+# sanity
+from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
 # concurrent
 # from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
 from tqdm import tqdm
 from docopt import docopt
 import yaml
 import gc
-
+import cPickle as pkl
 
 
 def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, testing=False):
@@ -71,6 +74,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
 
 
     val_x, val_t = loader.load_valid()
+    # sanity(val_x, exp_name)
     if model_config['class_name'] == 'ConvNet2d':
         val_x = np.rollaxis(val_x, 1, 4)
     elif model_config['class_name'] == 'ConvNet3d':
@@ -84,8 +88,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     # build loss
     y_ = tf.placeholder(tf.float32, [None, 2])
     learning_rate = tf.placeholder(tf.float32, [])
-    cross_entropy = tf.reduce_mean(
-        tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=net.output()))
+    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=net.output()))
     # train_step = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
     global_step = tf.Variable(0)
     # train_step = optimize_loss(cross_entropy, global_step, learning_rate,
@@ -98,6 +101,11 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
 
     # testing
     if testing:
+
+        plot_folder = '%s/%s' % (CONFIG.plots.dir, exp_name)
+        if not os.path.exists('%s/pkl'%(plot_folder)):
+            os.makedirs('%s/pkl'%(plot_folder))
+
         saver = tf.train.Saver()
         sess = tf.InteractiveSession()
         ckpt_path = '%s/%s.ckpt.best' % (CONFIG.saves.dir,exp_name)
@@ -107,6 +115,50 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
         feed_dict[y_] = val_t
         ce, val_accuracy = sess.run([cross_entropy, accuracy], feed_dict=feed_dict)
         print ('Best Validation CE: %f, Acc: %f' % (ce, val_accuracy))
+
+        # test section
+
+        dataset = BaseDataset(f_data_config, int(arguments['<fold_index>']), load_raw=True)
+        extractor = BaseExtractor(f_data_config)
+        loader = BaseLoader(dataset, extractor, data_config['batch_size'], fraction_positive=0.5)
+        cloader = loader
+
+        ind = 0
+        while True:
+            print (ind)
+            if arguments['--train']:
+                split = 'train'
+            else:
+                split = 'val'
+
+            loaded = cloader.load_split_event(split, True, 5)
+            if loaded is not None:
+                if loaded == 0:
+                    ind+=1
+                    continue
+                batch_xs, labels, gameclocks, meta = loaded
+            else:
+                print ('Bye')
+                sys.exit(0)
+            if model_config['class_name'] == 'ConvNet2d':
+                batch_xs = np.rollaxis(batch_xs, 1, 4)
+            elif model_config['class_name'] == 'ConvNet3d':
+                batch_xs = np.rollaxis(batch_xs, 1, 5)
+            else:
+                raise Exception('input format not specified')
+
+            feed_dict = net.input(batch_xs, None, True)
+            probs = sess.run(tf.nn.softmax(net.output()), feed_dict=feed_dict)
+
+            # save the raw predictions
+            probs = probs[:, 1]
+            pkl.dump([gameclocks, probs, labels], open('%s/pkl/%s-%i.pkl'%(plot_folder,split, ind), 'w'))
+
+            if arguments['--train']:
+                pkl.dump(meta, open('%s/pkl/%s-meta-%i.pkl'%(plot_folder,split, ind), 'w'))
+            ind += 1
+
+
         sys.exit(0)
 
     # checkpoints
@@ -138,8 +190,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
         import shutil
         shutil.rmtree(log_folder)
 
-    train_writer = tf.summary.FileWriter(
-        os.path.join(log_folder, 'train'), sess.graph)
+    train_writer = tf.summary.FileWriter(os.path.join(log_folder, 'train'), sess.graph)
     val_writer = tf.summary.FileWriter(os.path.join(log_folder, 'val'), sess.graph)
     tf.global_variables_initializer().run()
     # Train
@@ -186,6 +237,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 p = '%s/%s.ckpt.best' % (CONFIG.saves.dir, exp_name)
                 print ('Saving Best Model to: %s' % p)
                 save_path = best_saver.save(sess, p)
+                tf.train.export_meta_graph('%s.meta' % (p))
                 best_val_ce = val_ce
         if iter_ind % 2000 == 0:
             save_path = saver.save(sess,'%s/%s-%d.ckpt'%(CONFIG.saves.dir,exp_name,iter_ind))

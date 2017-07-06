@@ -1,12 +1,14 @@
 """detection_pr.py
 plot precision-recall, varying prob_threshold
 Usage:
-    detection_from_raw_pred.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> <percent_grid> --single
+    detection_pr.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> <percent_grid> --single --train
+    detection_pr.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> <percent_grid> --single
+    detection_pr.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> <percent_grid>
 
 Arguments:
     <percent_grid> e.g. 5, prob_threshold = 0,5,10,15 ...
 Example:
-    python detection_pr.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml nms1.yaml 5 --single
+    python detection_pr.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25-bn.yaml nms1.yaml 5 --single
 """
 
 from __future__ import absolute_import
@@ -52,10 +54,10 @@ if not os.path.exists(plot_folder):
 
 
 plt.figure()
-# if arguments['--train']:
-#     split = 'train'
-# else:
-split = 'val'
+if arguments['--train']:
+    split = 'train'
+else:
+    split = 'val'
 all_pred_f = filter(lambda s:'.pkl' in s and split in s
                     and 'meta' not in s,os.listdir('%s/pkl' % (plot_folder)))
 
@@ -96,6 +98,7 @@ if arguments['--single']:
     rs = []
     for prob_threshold in tqdm(xrange(0, 100, int(arguments['<percent_grid>']))):
         detector.config['prob_threshold'] = prob_threshold * .01
+        print('Probability %f' % (prob_threshold * .01))
         precision, recall = PR(all_pred_f, detector)
         ps.append(precision)
         rs.append(recall)

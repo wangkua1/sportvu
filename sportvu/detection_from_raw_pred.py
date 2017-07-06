@@ -3,9 +3,10 @@
 at 1 single setting
 Usage:
     detection_from_raw_pred.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> --train
+    detection_from_raw_pred.py <fold_index> <f_data_config> <f_model_config> <f_detect_config>
 
 Arguments:
-Example: python detection_from_raw_pred.py 1 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml nms1.yaml --train
+Example: python detection_from_raw_pred.py 1 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml nms1.yaml
 """
 
 from __future__ import absolute_import
@@ -33,9 +34,9 @@ print ("...Docopt... ")
 print(arguments)
 print ("............\n")
 
-f_data_config = CONFIG.data.config.dir + '/' + arguments['<f_data_config>']
-f_model_config = CONFIG.model.config.dir + '/' + arguments['<f_model_config>']
-f_detect_config = CONFIG.detect.config.dir + '/' + arguments['<f_detect_config>']
+f_data_config = '%s/%s' % (CONFIG.data.config.dir,arguments['<f_data_config>'])
+f_model_config = '%s/%s' % (CONFIG.model.config.dir,arguments['<f_model_config>'])
+f_detect_config = '%s/%s' % (CONFIG.detect.config.dir,arguments['<f_detect_config>'])
 if arguments['--train']:
     dataset = BaseDataset(f_data_config, fold_index=int(arguments['<fold_index>']), load_raw=True)
 # pre_trained = arguments['<pre_trained>']
@@ -64,16 +65,14 @@ if arguments['--train']:
     split = 'train'
 else:
     split = 'val'
-all_pred_f = filter(lambda s:'.pkl' in s and split in s
-                    and 'meta' not in s,os.listdir('%s/pkl'%(plot_folder))
-if arguments['--train']:
-    annotations = []
+all_pred_f = filter(lambda s:'.pkl' in s and split in s and 'meta' not in s,os.listdir('%s/pkl'%(plot_folder)))
+# if arguments['--train']:
+annotations = []
 for _, f in tqdm(enumerate(all_pred_f)):
     ind = int(f.split('.')[0].split('-')[1])
     gameclocks, pnr_probs, labels = pkl.load(open('%s/pkl/%s-%i.pkl'%(plot_folder,split,ind), 'rb'))
     meta = pkl.load(open('%s/pkl/%s-meta-%i.pkl' %(plot_folder,split, ind), 'rb'))
     cands, mp, frame_indices = detector.detect(pnr_probs, gameclocks, True)
-    print (cands)
     plt.plot(gameclocks, pnr_probs, '-')
     if mp is not None:
         plt.plot(gameclocks, mp, '-')
