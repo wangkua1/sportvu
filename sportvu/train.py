@@ -2,15 +2,15 @@
 
 Usage:
     train.py <fold_index> <f_data_config> <f_model_config>
-    train.py --test <fold_index> <f_data_config> <f_model_config>
-    train.py --test  --train <fold_index> <f_data_config> <f_model_config>
+    train.py --test <fold_index> <f_data_config> <f_model_config> <every_K_frame>
+    train.py --test  --train <fold_index> <f_data_config> <f_model_config> <every_K_frame>
 
 Arguments:
     <f_data_config>  example ''data/config/train_rev0.yaml''
     <f_model_config> example 'model/config/conv2d-3layers.yaml'
 
 Example:
-    python train.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml --test --train
+    python train.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml --test --train 5
 Options:
     --negative_fraction_hard=<percent> [default: 0]
 """
@@ -102,6 +102,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     # testing
     if testing:
 
+        every_K_frame = int(arguments['<every_K_frame>'])
         plot_folder = '%s/%s' % (CONFIG.plots.dir, exp_name)
         if not os.path.exists('%s/pkl'%(plot_folder)):
             os.makedirs('%s/pkl'%(plot_folder))
@@ -131,7 +132,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             else:
                 split = 'val'
 
-            loaded = cloader.load_split_event(split, True, 5)
+            loaded = cloader.load_split_event(split, True, every_K_frame)
             if loaded is not None:
                 if loaded == 0:
                     ind+=1
