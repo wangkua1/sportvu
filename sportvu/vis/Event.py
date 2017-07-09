@@ -54,16 +54,16 @@ class Event:
         ball_basket = int(moment.ball.x > 50)
         if ball_basket == self.home_basket: # HOME possession
           return True
-        else: # VISITOR possession 
+        else: # VISITOR possession
           return False
     def truncate_by_following_event(self, event2):
         """
-        use the given event to truncate the current  (i.e. do not include the 
+        use the given event to truncate the current  (i.e. do not include the
         trailing frames shown in a later event)
         """
         # trunctate
         end_time_from_e2 = event2['moments'][0][2]
-        last_idx = -1 
+        last_idx = -1
         for idx, moment in enumerate(self.moments):
           if moment.game_clock < end_time_from_e2:
             last_idx = idx
@@ -73,16 +73,16 @@ class Event:
     def sequence_around_t(self, T_a, tfr, seek_last=True):
         """
         segment [T_a - tfr, T_a + tfr]
-        note: when seek_last = True, seek for the last T_a 
-              (this detail becomes important when game-clock stops within one Event) 
+        note: when seek_last = True, seek for the last T_a
+              (this detail becomes important when game-clock stops within one Event)
         """
         T_a_index = -1
         for idx, moment in enumerate(self.moments):
           if moment.game_clock < T_a:
             T_a_index = idx
             break
-        
-        if T_a_index == -1: 
+
+        if T_a_index == -1:
           # print ('EventException')
           raise EventException('bad T_a, or bad event')
 
@@ -103,14 +103,14 @@ class Event:
             ret.append(l)
           line.set_ydata(self.futures[1][frame_ind, :, 1])
           line.set_xdata(self.futures[1][frame_ind, :, 0])
-          
+
         moment = self.moments[i]
         for j, circle in enumerate(player_circles):
             try:
               circle.center = moment.players[j].x, moment.players[j].y
             except:
               raise EventException()
-            
+
             annotations[j].set_position(circle.center)
             clock_test = 'Quarter {:d}\n {:02d}:{:02d}\n {:03.1f}'.format(
                          moment.quarter,
@@ -124,16 +124,43 @@ class Event:
         court_center_x = Constant.X_MAX /2
         court_center_y = Constant.Y_MAX /2
         player_of_interest = moment.players[7]
-            
+
+        return ret
+
+    def update_movement(self, i, player_circles, ball_circle, annotations, clock_info):
+        ret = [player_circles, ball_circle]
+
+        moment = self.moments[i]
+        for j, circle in enumerate(player_circles):
+            try:
+                circle.center = moment.players[j].x, moment.players[j].y
+            except:
+                raise EventException()
+
+            annotations[j].set_position(circle.center)
+            clock_test = 'Quarter {:d}\n {:02d}:{:02d}\n {:03.1f}'.format(
+                moment.quarter,
+                int(moment.game_clock) % 3600 // 60,
+                int(moment.game_clock) % 60,
+                moment.shot_clock)
+            clock_info.set_text(clock_test)
+        ball_circle.center = moment.ball.x, moment.ball.y
+        ball_circle.radius = moment.ball.radius / Constant.NORMALIZATION_COEF
+        x = np.arange(Constant.X_MIN, Constant.X_MAX, 1)
+        court_center_x = Constant.X_MAX / 2
+        court_center_y = Constant.Y_MAX / 2
+        player_of_interest = moment.players[7]
+
         return ret
 
     def show(self, save_path='', futures=None):
-        global plt
-        if plt is None:
-          import matplotlib.pyplot as plt
-          from matplotlib import animation
-          from matplotlib.patches import Circle, Rectangle, Arc
-          import cPickle as pkl
+        # global plt
+        #
+        # if plt is None:
+        import matplotlib.pyplot as plt
+        from matplotlib import animation
+        from matplotlib.patches import Circle, Rectangle, Arc
+        import cPickle as pkl
         # Leave some space for inbound passes
         ax = plt.axes(xlim=(Constant.X_MIN,
                             Constant.X_MAX),
@@ -159,22 +186,22 @@ class Event:
                        for player in start_moment.players]
         x = np.arange(Constant.X_MIN, Constant.X_MAX, 1)
         if futures is not None:
-          self.futures = futures
-        pred_lines = []
-        for _ in range(self.futures[2].shape[1]):
-          l, = ax.plot([],[], color='k', alpha=1./self.futures[2].shape[1])
-          pred_lines.append(l)
-        line, = ax.plot([], [], color='w')
+            self.futures = futures
+            pred_lines = []
+            for _ in range(self.futures[2].shape[1]):
+              l, = ax.plot([],[], color='k', alpha=1./self.futures[2].shape[1])
+              pred_lines.append(l)
+            line, = ax.plot([], [], color='w')
 
         # Prepare table
         sorted_players = sorted(start_moment.players, key=lambda player: player.team.id)
-        
+
         home_player = sorted_players[0]
         guest_player = sorted_players[5]
         column_labels = tuple([home_player.team.name, guest_player.team.name])
         column_colours = tuple([home_player.team.color, guest_player.team.color])
         cell_colours = [column_colours for _ in range(5)]
-        
+
         home_players = [' #'.join([player_dict[player.id][0], player_dict[player.id][1]]) for player in sorted_players[:5]]
         guest_players = [' #'.join([player_dict[player.id][0], player_dict[player.id][1]]) for player in sorted_players[5:]]
         players_data = list(zip(home_players, guest_players))
@@ -207,10 +234,17 @@ class Event:
             ax.add_patch(circle)
         ax.add_patch(ball_circle)
 
-        anim = animation.FuncAnimation(
-                         fig, self.update_radius,
-                         fargs=(player_circles, ball_circle, annotations, clock_info, [line], pred_lines),
-                         frames=len(self.moments), interval=Constant.INTERVAL)
+        if futures is not None:
+            anim = animation.FuncAnimation(
+                             fig, self.update_radius,
+                             fargs=(player_circles, ball_circle, annotations, clock_info, [line], pred_lines),
+                             frames=len(self.moments), interval=Constant.INTERVAL)
+        else:
+            anim = animation.FuncAnimation(
+                fig, self.update_movement,
+                fargs=(player_circles, ball_circle, annotations, clock_info),
+                frames=len(self.moments), interval=Constant.INTERVAL)
+
         court = plt.imread(data.constant.court_path)
         plt.imshow(court, zorder=0, extent=[Constant.X_MIN, Constant.X_MAX - Constant.DIFF,
                                             Constant.Y_MAX, Constant.Y_MIN])

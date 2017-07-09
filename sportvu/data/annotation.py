@@ -1,5 +1,6 @@
 import pandas as pd
 import math
+import cPickle as pickle
 
 def read_annotation(fpath):
     df = pd.read_csv(open(fpath,'rb'), header=None)
@@ -20,7 +21,15 @@ def read_annotation(fpath):
         annotations[row[0]] = anno
     return annotations
 
-
+def read_annotation_from_raw(fpath, game_id):
+    data = pickle.load(open(fpath, 'rb'))
+    annotations = {}
+    for ind, row in enumerate(data):
+        anno = []
+        if row['gameid'] == str(game_id):
+            anno.append(row['gameclock'])
+        annotations[row['eid']] = anno
+    return annotations
 
 def prepare_gt_file_from_raw_label_dir(pnr_dir):
     gt = []
@@ -53,7 +62,6 @@ if __name__ == '__main__':
     from sportvu.vis.Game import Game
     from sportvu.vis.Event import Event
     import os
-    import cPickle as pickle
     game_dir = data.constant.game_dir
     pnr_dir = os.path.join(data.constant.data_dir, 'data/pnr-annotations')
     script_anno_rev0()

@@ -4,6 +4,8 @@ Usage:
     make_one_game.py --list <index> <dir-prefix>
     make_one_game.py [--annotate] [--list] <index> <dir-prefix> <pnr-prefix> <time-frame-radius>
     make_one_game.py --annotate [--list] [--gameid] <gameid> <dir-prefix> <pnr-prefix> <time-frame-radius>
+    make_one_game.py --annotate --gameid <gameid> <index> <dir-prefix> <pnr-prefix> <time-frame-radius>
+    make_one_game.py --from_raw --gameid <gameid> <index> <dir-prefix> <pnr-prefix> <time-frame-radius>
 
 Arguments:
     <index> not a very good way of doing things, this is the index into os.listdir
@@ -14,6 +16,7 @@ Arguments:
 Options:
     --list: for processing more than one game
     --annotate: use annotation
+    --from_raw: use raw predictions to plot animation of pnr
 """
 
 from sportvu import data
@@ -80,13 +83,15 @@ def render_one_game(raw_data, directory, skip_these):
     N = len(raw_data['events'])
     if arguments['--annotate']:
         pnr_annotations = data.read_annotation(os.path.join(pnr_dir,arguments['<pnr-prefix>']+'-'+raw_data['gameid']+'.csv'))
+    elif arguments['--from_raw']:
+        pnr_annotations = data.read_annotation_from_raw(os.path.join(pnr_dir, 'gt/hard-negative-examples.pkl'), raw_data['gameid'])
     for i in xrange(N):
         if i in skip_these:
             print ('Skipping event <%i>'%i)
             continue
         e = Event(raw_data['events'][i])
         ## preprocessing
-        if arguments['--annotate']:
+        if arguments['--annotate'] or arguments['--from_raw']:
             if i not in pnr_annotations.keys():
                 print "Clip index %i not labelled"%i
                 continue
@@ -95,7 +100,7 @@ def render_one_game(raw_data, directory, skip_these):
                 ## render
                 try:
                     e.sequence_around_t(T_a, int(arguments['<time-frame-radius>']))
-                    e.show(os.path.join(directory, '%i-pnr%i.mp4' %(i, pnr_ind)))
+                    e.show(os.path.join(directory, '%i-pnr-%i.mp4' %(i, pnr_ind)))
                 except EventException as e:
                     print ('malformed sequence, skipping')
                     continue
@@ -125,4 +130,3 @@ else:
         index = int(index)
     dir_prefix = arguments['<dir-prefix>']
     wrapper_render_one_game(index, dir_prefix, gameid)
-
