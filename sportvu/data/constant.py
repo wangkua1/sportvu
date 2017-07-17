@@ -5,6 +5,10 @@ elif os.environ['HOME'] == '/home/wangkua1': ## jackson kintsugi
     data_dir = '/media/wangkua1/6f076f0b-283b-44a7-b264-4019d85ecb98/data/csc2541/'
 elif os.environ['HOME'] == '/u/slwang': ## shenlong guppy/pratt286b 
     data_dir = '/ais/gobi5/wangkua1/data/csc2541/'
+elif os.environ['HOME'] == '/home/ethanf': ## ethan local
+    data_dir = '/home/ethanf/gobi5/ethanf/data/nba/'
+elif os.environ['HOME'] == '/u/ethanf': ## ethan guppy
+    data_dir = '/ais/gobi5/ethanf/data/nba/'
 else:
     raise Exception("Unspecified data_dir, unknown environment")
 
