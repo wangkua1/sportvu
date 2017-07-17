@@ -16,6 +16,7 @@ def read_annotation(fpath):
                 pass # this is accepted format
             else:
                 print pnr, pnr=='-'
+                print('Error in game file: %s on line %i' % (fpath, ind))
                 raise Exception('unknown annotation format')
         annotations[row[0]] = anno
     return annotations

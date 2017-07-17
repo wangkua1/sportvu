@@ -46,24 +46,26 @@ class Event:
         '0021500357' q1 home: 0
         '0021500150' q1 home: 1
         '0021500278' q1 home: 0
+        '0021500196' q1 home: 0
+        '0021500188' q1 home: 0
         """
-        hard_code = {'0021500357':0, '0021500150':1, '0021500278':0}
+        hard_code = {'0021500357':0, '0021500150':1, '0021500278':0, '0021500196': 0, '0021500188':0}
         self.home_basket = (hard_code[self.gameid] + (self.moments[0].quarter > 2))%2
 
     def is_home_possession(self, moment):
         ball_basket = int(moment.ball.x > 50)
         if ball_basket == self.home_basket: # HOME possession
           return True
-        else: # VISITOR possession 
+        else: # VISITOR possession
           return False
     def truncate_by_following_event(self, event2):
         """
-        use the given event to truncate the current  (i.e. do not include the 
+        use the given event to truncate the current  (i.e. do not include the
         trailing frames shown in a later event)
         """
         # trunctate
         end_time_from_e2 = event2['moments'][0][2]
-        last_idx = -1 
+        last_idx = -1
         for idx, moment in enumerate(self.moments):
           if moment.game_clock < end_time_from_e2:
             last_idx = idx
@@ -73,16 +75,16 @@ class Event:
     def sequence_around_t(self, T_a, tfr, seek_last=True):
         """
         segment [T_a - tfr, T_a + tfr]
-        note: when seek_last = True, seek for the last T_a 
-              (this detail becomes important when game-clock stops within one Event) 
+        note: when seek_last = True, seek for the last T_a
+              (this detail becomes important when game-clock stops within one Event)
         """
         T_a_index = -1
         for idx, moment in enumerate(self.moments):
           if moment.game_clock < T_a:
             T_a_index = idx
             break
-        
-        if T_a_index == -1: 
+
+        if T_a_index == -1:
           # print ('EventException')
           raise EventException('bad T_a, or bad event')
 
@@ -103,14 +105,14 @@ class Event:
             ret.append(l)
           line.set_ydata(self.futures[1][frame_ind, :, 1])
           line.set_xdata(self.futures[1][frame_ind, :, 0])
-          
+
         moment = self.moments[i]
         for j, circle in enumerate(player_circles):
             try:
               circle.center = moment.players[j].x, moment.players[j].y
             except:
               raise EventException()
-            
+
             annotations[j].set_position(circle.center)
             clock_test = 'Quarter {:d}\n {:02d}:{:02d}\n {:03.1f}'.format(
                          moment.quarter,
@@ -124,7 +126,7 @@ class Event:
         court_center_x = Constant.X_MAX /2
         court_center_y = Constant.Y_MAX /2
         player_of_interest = moment.players[7]
-            
+
         return ret
 
     def show(self, save_path='', futures=None):
@@ -168,13 +170,13 @@ class Event:
 
         # Prepare table
         sorted_players = sorted(start_moment.players, key=lambda player: player.team.id)
-        
+
         home_player = sorted_players[0]
         guest_player = sorted_players[5]
         column_labels = tuple([home_player.team.name, guest_player.team.name])
         column_colours = tuple([home_player.team.color, guest_player.team.color])
         cell_colours = [column_colours for _ in range(5)]
-        
+
         home_players = [' #'.join([player_dict[player.id][0], player_dict[player.id][1]]) for player in sorted_players[:5]]
         guest_players = [' #'.join([player_dict[player.id][0], player_dict[player.id][1]]) for player in sorted_players[5:]]
         players_data = list(zip(home_players, guest_players))

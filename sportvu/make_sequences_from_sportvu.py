@@ -62,11 +62,15 @@ for fold_index in tqdm(xrange(1)): ## I have never actually used more than 1 fol
     np.save(os.path.join(curr_folder, 'vx'), vx)
     np.save(os.path.join(curr_folder, 'vt'), vt)
 
+    del vx, vt
+
     x, t = loader.load_train(extract=False, positive_only=True)
     x = np.array([make_3teams_11players(extractor.extract_raw(e))
                   for e in x])
     np.save(os.path.join(curr_folder, 'pos_x'), x)
     np.save(os.path.join(curr_folder, 'pos_t'), t)
+
+    del x
 
     if arguments['--sample']:
         x, t = loader.next_batch(extract=False)
@@ -93,11 +97,36 @@ for fold_index in tqdm(xrange(1)): ## I have never actually used more than 1 fol
                             break
                     if not ispositive:
                         xs.append(x)
+                if ind % 100 == 0 and ind > 100:
+                    print('Saving split')
+                    # npy file was written from previous split
+                    x = xs
+                    xs = []
+                    x = np.array([make_3teams_11players(extractor.extract_raw(e))
+                                  for e in x])
+                    x_arr = np.load(os.path.join(curr_folder, 'neg_x.npy'))
+                    x_arr = np.append(x_arr,x,axis=0)
+                    np.save(os.path.join(curr_folder, 'neg_x'), x_arr)
+                    del x_arr, x
+                elif ind % 100 == 0 and ind == 100:
+                    print('Saving split')
+                    # no split has been written to file
+                    x = xs
+                    xs = []
+                    x = np.array([make_3teams_11players(extractor.extract_raw(e))
+                                  for e in x])
+                    np.save(os.path.join(curr_folder, 'neg_x'), x)
+                    del x
             else:
+                print('Saving split')
+                # last split
                 x = xs
+                x = np.array([make_3teams_11players(extractor.extract_raw(e))
+                              for e in x])
+                x_arr = np.load(os.path.join(curr_folder, 'neg_x.npy'))
+                x_arr = np.append(x_arr,x,axis=0)
+                np.save(os.path.join(curr_folder, 'neg_x'), x_arr)
+                del x_arr, xs, x
                 break
 
-    x = np.array([make_3teams_11players(extractor.extract_raw(e))
-                  for e in x])
-    np.save(os.path.join(curr_folder, 'neg_x'), x)
     np.save(os.path.join(curr_folder, 'neg_t'), t)

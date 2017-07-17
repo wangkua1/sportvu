@@ -192,7 +192,7 @@ class BaseLoader:
             ret = 0
         else:
             if extract:
-                ret_val = self.extractor.extract_batch(ret_val, player_id=player_id,dont_resolve_basket=dont_resolve_basket)
+                ret_val = self.extractor.extract_batch(ret_val,dont_resolve_basket=dont_resolve_basket)
             ret = [ret_val, ret_gameclocks, ret_frame_idx]
         return ret
 
@@ -238,7 +238,7 @@ class BaseLoader:
 
 class PreprocessedLoader:
     def __init__(self, dataset, extractor, batch_size, mode='sample', fraction_positive=.5):
-        """ 
+        """
         simply loads numpy matrices from disk without preprocessing
         """
         self.dataset = dataset  # not used
@@ -280,7 +280,7 @@ class PreprocessedLoader:
 
 class EventLoader:
     def __init__(self, dataset, extractor, batch_size, mode='sample', fraction_positive=.5):
-        """ 
+        """
         In between Base and Preproc.
         Loads extracted Events from disk, and does extraction
         note: a lot faster than Base because it doesn't need to to extraction
@@ -339,7 +339,7 @@ class EventLoader:
 class SequenceLoader:
     def __init__(self, dataset, extractor, batch_size, mode='sample',
                  fraction_positive=.5, negative_fraction_hard=0):
-        """ 
+        """
         """
         self.negative_fraction_hard = negative_fraction_hard
         self.dataset = dataset  # not used
@@ -436,7 +436,7 @@ class Seq2SeqLoader:
     def __init__(self, dataset, extractor, batch_size, mode='sample',
                  fraction_positive=.5, negative_fraction_hard=0,
                  use_filter_discontinuous=True, move_N_neg_to_val=0):
-        """ 
+        """
         """
         self.negative_fraction_hard = negative_fraction_hard
         self.dataset = dataset  # not used
