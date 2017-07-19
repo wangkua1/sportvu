@@ -19,6 +19,23 @@ def format_pbp(pbp):
               str(pp['PCTIMESTRING'])+ " , "+\
               str(pp['event_str'])  + '\n'
     return event_str
+
+def get_position_number(position, add_noise=True):
+    if add_noise:
+        noise = np.random.rand()*0.2-0.1
+    else:
+        noise = 0.0
+    if position == 'G':
+        return 1.+noise
+    if position == 'F-G':
+        return 2.+noise
+    if position == 'F':
+        return 3.+noise
+    if position == 'C-F':
+        return 4.+noise
+    if position == 'C':
+        return 5.+noise
+
 class Event:
     """A class for handling and showing events"""
 
@@ -36,8 +53,10 @@ class Event:
         player_names = [" ".join([player['firstname'],
                         player['lastname']]) for player in players]
         player_jerseys = [player['jersey'] for player in players]
-        values = list(zip(player_names, player_jerseys))
-        # Example: 101108: ['Chris Paul', '3']
+        player_position = [player['position'] for player in players]
+        player_position_numer = [get_position_number(player['position']) for player in players]
+        values = list(zip(player_names, player_jerseys, player_position, player_position_numer))
+        # Example: 101108: ['Chris Paul', '3', 'G']
         self.player_ids_dict = dict(zip(player_ids, values))
         self.pbp = event['playbyplay']
     def _resolve_home_basket(self):
@@ -95,7 +114,7 @@ class Event:
     def update_radius(self, i, player_circles, ball_circle, annotations, clock_info, lines, pred_lines):
         line = lines[0]
         ret = [player_circles, ball_circle, line]
-        if i in self.futures[0]:
+        if self.futures is not None and i in self.futures[0]:
           frame_ind = self.futures[0].index(i)
           for sample_idx, l in enumerate(pred_lines):
             l.set_ydata(self.futures[2][frame_ind, sample_idx,:,1])
@@ -131,9 +150,9 @@ class Event:
         global plt
         if plt is None:
           import matplotlib.pyplot as plt
-          from matplotlib import animation
-          from matplotlib.patches import Circle, Rectangle, Arc
-          import cPickle as pkl
+        from matplotlib import animation
+        from matplotlib.patches import Circle, Rectangle, Arc
+        import cPickle as pkl
         # Leave some space for inbound passes
         ax = plt.axes(xlim=(Constant.X_MIN,
                             Constant.X_MAX),
@@ -159,11 +178,14 @@ class Event:
                        for player in start_moment.players]
         x = np.arange(Constant.X_MIN, Constant.X_MAX, 1)
         if futures is not None:
-          self.futures = futures
-        pred_lines = []
-        for _ in range(self.futures[2].shape[1]):
-          l, = ax.plot([],[], color='k', alpha=1./self.futures[2].shape[1])
-          pred_lines.append(l)
+            self.futures = futures
+            pred_lines = []
+            for _ in range(self.futures[2].shape[1]):
+              l, = ax.plot([],[], color='k', alpha=1./self.futures[2].shape[1])
+              pred_lines.append(l)
+        else:
+            self.futures = None
+            pred_lines = None
         line, = ax.plot([], [], color='w')
 
         # Prepare table

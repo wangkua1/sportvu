@@ -1,0 +1,27 @@
+node1: &randseed 1
+randseed: *randseed
+
+preproc_dir: ethanf_seq
+no_extract: True ####
+### Dataset Configuration
+data_config:
+    shuffle: True
+    train_game_ids: ['0021500357', '0021500278']
+    val_game_ids: ['0021500150']
+    min_moments: 50
+batch_size: 32
+extractor_config:
+    version: 2
+    #augmentation (turned off when validating)
+    tfa_jitter_radius: 20
+    #tfr: 30
+    d0flip: True
+    d1flip: True
+    jitter: [1, 1]
+    #parametrization
+    video: False
+    jump_threshold: 8.0 # if distance is larger it is a jump if frame and should be broken up.
+    crop: 'bmf' #{'bmf', 'tb'} #bmf=Ball-Mid-Frame, tb=Track-Ball
+    crop_size: [25,25] # in units of ft
+    min_length: 25 # shortest length to consider
+    max_length: 300 # longest to consider

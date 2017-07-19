@@ -2,13 +2,13 @@ from __future__ import division
 import cPickle as pickle
 import yaml
 import os
+from copy import copy
 from sportvu import data
 import numpy as np
 import yaml
 from utils import (pictorialize_team, pictorialize_fast, 
                 make_3teams_11players, make_reference, scale_last_dim)
 game_dir = data.constant.game_dir
-
 
 class ExtractorException(Exception):
     pass
@@ -35,7 +35,7 @@ class BaseExtractor(object):
         else:
             self.config = f_config['extractor_config']
             
-    def extract_raw(self, event, dont_resolve_basket=False):
+    def extract_raw(self, event, dont_resolve_basket=False,sorted=False):
         """
         """
         ##
@@ -45,8 +45,19 @@ class BaseExtractor(object):
             [], [], [], [], []], [[], [], [], [], []]
         for moment in moments:
             ball[0].append([moment.ball.x, moment.ball.y])
+            if sorted:
+                player_ids = [player.id for player in moment.players]
+                team1 = zip(moment.players[:5], [event.player_ids_dict[idx][3] for idx in player_ids[:5]])
+                team1.sort(key=lambda x: x[1])
+                team1 = zip(*team1)[0]
+                team2 = zip(moment.players[5:], [event.player_ids_dict[idx][3] for idx in player_ids[5:]])
+                team2.sort(key=lambda x: x[1])
+                team2 = zip(*team2)[0]
+                player_list = team1 + team2
+            else:
+                player_list=moment.players
             off_id, def_id = 0, 0
-            for player_idx, player in enumerate(moment.players):
+            for player_idx, player in enumerate(player_list):
                 if dont_resolve_basket:
                     if player_idx < 5:
                         offense[off_id].append([player.x, player.y])
@@ -61,6 +72,7 @@ class BaseExtractor(object):
                     else:  # defense
                         defense[def_id].append([player.x, player.y])
                         def_id += 1
+
         if ( len(ball) == 0 or
             (not ((len(np.array(ball).shape) == 3
                  and len(np.array(offense).shape) == 3
@@ -126,7 +138,7 @@ class BaseExtractor(object):
         if input_is_sequence:
             sequences = events_arr
         else:
-            sequences = np.array([make_3teams_11players(
+            sequences = np.array([make_3teams_11players( #TODO handle excaptions, players not in the same length
                 self.extract_raw(e,dont_resolve_basket=dont_resolve_basket)) for e in events_arr])
         # time crop (+jitter) , spatial crop
         if 'version' in self.config and self.config['version'] >= 2:
@@ -182,6 +194,94 @@ class BaseExtractor(object):
 
 
 
+
+class EthanSeqExtractor(BaseExtractor):
+    """
+
+    """
+    def __init__(self, f_config):
+        super(self.__class__, self).__init__(f_config)
+        if 'jump_threshold' in self.config:
+            self.thresh = self.config['jump_threshold']
+        else:
+            self.thresh = 0.
+        if 'min_length' in self.config:
+            self.min_length = self.config['min_length']
+        else:
+            self.min_length = 0.
+        if 'max_length' in self.config:
+            self.max_length = self.config['max_length']
+        else:
+            self.max_length = np.inf
+
+    def extract_batch(self, events_arr, input_is_sequence=False, dont_resolve_basket=False, sort_player=True, add_velocity=False):
+        Y_RANGE = 100
+        X_RANGE = 50
+        if input_is_sequence:
+            sequences = events_arr
+        else:
+            sequences = []
+            for e in events_arr:
+                try:
+                    sequences.append(np.array(make_3teams_11players(self.extract_raw(e, dont_resolve_basket=dont_resolve_basket))))
+                except:
+                    pass
+            # sequences = [np.array(make_3teams_11players(self.extract_raw(e,dont_resolve_basket=dont_resolve_basket, sorted=sort_player))) for e in events_arr]
+        if add_velocity:
+            sequences = self._add_velocity(sequences) #TODO
+        sequences, mask = self._remove_jumps(sequences)
+
+        if self.augment and np.sum(self.config['jitter']) > 0:
+            d0_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][0]
+            d1_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][1]
+            # hacky: can delete after -- temporary for malformed data (i.e.
+            # missing player)
+            try:
+                sequences[:, :, :, 0] += d0_jit
+            except:
+                raise ExtractorException()
+            sequences[:, :, :, 1] += d1_jit
+        if self.augment and self.config['d0flip'] == True:
+            for seq in sequences:
+                if np.random.rand()>0.5:
+                    seq[:,:,0] = Y_RANGE-seq[:,:,0]
+        if self.augment and self.config['d1flip'] == True:
+            for seq in sequences:
+                if np.random.rand()>0.5:
+                    seq[:,:,1] = X_RANGE-seq[:,:,1]
+
+        return sequences, mask
+
+    def _remove_jumps(self, sequences):
+        new_sequences = []
+        for seq in sequences:
+            dist = ((seq[:,:-1,:]-seq[:,1:,:])**2).sum(axis=2).sum(axis=0)
+            jumps = [i  for i in range(len(dist)) if dist[i] > self.thresh]
+            if len(jumps)>0:
+                print "{} jumps detected. Min dist = {}".format(len(jumps), dist[jumps].min())
+                seq = np.split(seq, jumps, axis=1)
+            else:
+                seq = [seq]
+            for x in seq:
+                # print x.shape
+                if x.shape[1]>self.max_length:
+                    idx = np.random.randint(low=0, high=x.shape[1]-self.max_length-2)
+                    new_sequences.append(x[:,idx:idx+self.max_length+1,:])
+                elif x.shape[1]>self.min_length:
+                    new_sequences.append(x)
+        lengths = [x.shape[1] for x in new_sequences]
+        max_in_batch = max(lengths)
+        to_pad = [max_in_batch-x for x in lengths]
+        new_sequences = np.array([np.lib.pad(new_sequences[i],((0,0),(0,to_pad[i]),(0,0)),'constant',constant_values=((0,0),(0,0),(0,0)))\
+                         for i in range(len(lengths))])
+        masks = np.zeros((new_sequences.shape[0],new_sequences.shape[2]))
+        for i in range(masks.shape[0]):
+            masks[i,:lengths[i]] = 1
+        labels = new_sequences[:,:,1:,:]
+        new_sequences = new_sequences[:,:,:-1,:]
+        masks = masks[:,1:]  # important not :-1
+        return new_sequences, labels, masks
+
 class Seq2SeqExtractor(BaseExtractor):
     """
     """
@@ -205,7 +305,7 @@ class Seq2SeqExtractor(BaseExtractor):
             sequences = events_arr
         else:
             sequences = np.array([make_3teams_11players(
-                self.extract_raw(e,dont_resolve_basket=dont_resolve_basket)) for e in events_arr])
+                self.extract_raw(e, dont_resolve_basket=dont_resolve_basket)) for e in events_arr])
         # spatial jitter
         if self.augment and np.sum(self.config['jitter']) > 0:
             d0_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][0]
@@ -349,47 +449,60 @@ ImagePyramid Extractor
 if __name__ == '__main__':
     from sportvu.data.dataset import BaseDataset
     from sportvu.data.extractor import BaseExtractor
-    from loader import BaseLoader, Seq2SeqLoader
-    ##
-    # f_config = 'config/train_rev0.yaml'
+    from sportvu.vis.Event import Event, EventException
+    import os
+    from os.path import join
+    data_dir = '/home/ethanf/gobi5/ethanf/data/nba/'
+    f_data_config = '/home/ethanf/projects/sportvu/sportvu/data/config/ethanf_seq.yaml'
+    files = os.listdir(join(data_dir, 'data'))
+    example = pickle.load(open(join(data_dir, 'data', '0021500357.pkl'), 'r'))
+    events = example['events']
+    e = Event(events[0], gameid=example['gameid'])
+    event_arr = [Event(events[i], gameid=example['gameid']) for i in range(5)]
+    extractor = EthanSeqExtractor(f_data_config)
+    seq, mask = extractor.extract_batch(event_arr)
+    # seq, mask = extractor._remove_jumps(seq)
+
+    # ##
+    # # f_config = 'config/train_rev0.yaml'
+    # # dataset = BaseDataset(f_config, 0)
+    # # extractor = BaseExtractor(f_config)
+    # # loader = BaseLoader(dataset, extractor, 35, fraction_positive=0)
+    # # print ('testing next_batch')
+    # # batch = loader.next_batch(extract=False)
+    # # for eind, event in enumerate(batch[0]):
+    # #     event.show('/home/wangkua1/Pictures/vis/%i.mp4' % eind)
+    #
+    # f_config = 'config/rev3-dec-single-frame.yaml'
     # dataset = BaseDataset(f_config, 0)
-    # extractor = BaseExtractor(f_config)
-    # loader = BaseLoader(dataset, extractor, 35, fraction_positive=0)
+    # extractor = EncDecExtractor(f_config)
+    # loader = Seq2SeqLoader(dataset, extractor, 100, fraction_positive=0)
     # print ('testing next_batch')
-    # batch = loader.next_batch(extract=False)
-    # for eind, event in enumerate(batch[0]):
-    #     event.show('/home/wangkua1/Pictures/vis/%i.mp4' % eind)
-
-    f_config = 'config/rev3-dec-single-frame.yaml'
-    dataset = BaseDataset(f_config, 0)
-    extractor = EncDecExtractor(f_config)
-    loader = Seq2SeqLoader(dataset, extractor, 100, fraction_positive=0)
-    print ('testing next_batch')
-    batch = loader.next()
-    # for eind, event in enumerate(batch[0]):
-    #     event.show('/home/wangkua1/Pictures/vis/%i.mp4' % eind)
-
-    # visualize model input
-    # import  matplotlib.pyplot as plt
-    # plt.ion()
-    # for x in batch[0]:
-    #     img = np.rollaxis(x, 0, 3)
-    #     plt.imshow(img)
-    #     raw_input()
-
-    # ## concurrent
-    # import sys
-    # sys.path.append('/home/wangkua1/toolboxes/resnet')
-    # from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
-    # from tqdm import tqdm
-
-    # print ("compare loading latency")
-    # Q_size = 100
-    # N_thread = 32
-    # cloader = ConcurrentBatchIterator(loader, max_queue_size=Q_size, num_threads=N_thread)
-    # N = 100
-    # for i in tqdm(xrange(N), desc='multi thread Q size %i, N thread %i'%(Q_size, N_thread)):
-    #     b = cloader.next()
-
-    # for i in tqdm(xrange(N), desc='single thread'):
-    #     b = loader.next()
+    # batch = loader.next()
+    # # for eind, event in enumerate(batch[0]):
+    # #     event.show('/home/wangkua1/Pictures/vis/%i.mp4' % eind)
+    #
+    # # visualize model input
+    # # import  matplotlib.pyplot as plt
+    # # plt.ion()
+    # # for x in batch[0]:
+    # #     img = np.rollaxis(x, 0, 3)
+    # #     plt.imshow(img)
+    # #     raw_input()
+    #
+    # # ## concurrent
+    # # import sys
+    # # sys.path.append('/home/wangkua1/toolboxes/resnet')
+    # # from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
+    # # from tqdm import tqdm
+    #
+    # # print ("compare loading latency")
+    # # Q_size = 100
+    # # N_thread = 32
+    # # cloader = ConcurrentBatchIterator(loader, max_queue_size=Q_size, num_threads=N_thread)
+    # # N = 100
+    # # for i in tqdm(xrange(N), desc='multi thread Q size %i, N thread %i'%(Q_size, N_thread)):
+    # #     b = cloader.next()
+    #
+    # # for i in tqdm(xrange(N), desc='single thread'):
+    # #     b = loader.next()

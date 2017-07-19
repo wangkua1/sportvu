@@ -5,6 +5,7 @@ import os
 from sportvu import data
 import numpy as np
 game_dir = data.constant.game_dir
+from sportvu.vis.Event import Event, EventException
 
 
 def _hash(i):
@@ -236,5 +237,48 @@ class BaseDataset:
     #         pass
 
 
+class SeqDataset:
+    def __init__(self, f_config, load_raw=True):
+        # configuration
+        # self.fold_index = fold_index
+        if type(f_config) ==str:
+            self.config = yaml.load(open(f_config, 'rb'))
+        else:
+            self.config = f_config
+        self.min_moments = self.config['data_config']['min_moments']
+        self.train_game_ids = self.config['data_config']['train_game_ids']
+        self.val_game_ids = self.config['data_config']['val_game_ids']
+        self.game_ids = self.train_game_ids+self.val_game_ids
+        if load_raw:
+            self.games = {}
+            for gameid in self.game_ids:
+                with open(os.path.join(game_dir, gameid + '.pkl'), 'rb') as f:
+                    raw_data = pickle.load(f)
+                self.games[raw_data['gameid']] = raw_data
+
+    def propose_Ta(self, train=True, return_Event=False):
+        if train:
+            game_ids = self.train_game_ids
+        else:
+            game_ids = self.val_game_ids
+        while True:
+            g_ind = np.random.randint(0, len(game_ids))
+            e_ind = np.random.randint(
+                0, len(self.games[game_ids[g_ind]]['events']))
+
+            e = self.games[game_ids[g_ind]]['events'][e_ind]
+            if len(e['moments']) < self.min_moments:
+                continue
+            if return_Event:
+                return Event(e,gameid=game_ids[g_ind])
+            else:
+                return e
+
+    def get_next_val(self):
+        for game_id in self.val_game_ids:
+            for e in self.games[game_id]['events']:
+                yield e
+
 if __name__ == '__main__':
-    dataset = BaseDataset('config/train_rev0.yaml', 0)
+    f_data_config = '/home/ethanf/projects/sportvu/sportvu/data/config/ethanf_seq.yaml'
+    dataset = SeqDataset(f_data_config, 0)
