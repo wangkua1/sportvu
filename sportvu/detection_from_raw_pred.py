@@ -6,7 +6,7 @@ Usage:
     detection_from_raw_pred.py <fold_index> <f_data_config> <f_model_config> <f_detect_config>
 
 Arguments:
-Example: python detection_from_raw_pred.py 1 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml nms1.yaml
+Example: python detection_from_raw_pred.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml nms1.yaml
 """
 
 from __future__ import absolute_import
@@ -33,6 +33,9 @@ arguments = docopt(__doc__)
 print ("...Docopt... ")
 print(arguments)
 print ("............\n")
+
+game_dir = data.constant.game_dir
+pnr_dir = os.path.join(game_dir, 'pnr-annotations')
 
 f_data_config = '%s/%s' % (CONFIG.data.config.dir,arguments['<f_data_config>'])
 f_model_config = '%s/%s' % (CONFIG.model.config.dir,arguments['<f_model_config>'])
@@ -90,3 +93,4 @@ for _, f in tqdm(enumerate(all_pred_f)):
     plt.savefig('%s/%s-%s-%i.png' %(plot_folder,detect_config['class'], split, ind))
     plt.clf()
 pkl.dump(annotations, open('%s/pkl/hard-negative-examples.pkl'%(plot_folder), 'wb'))
+pkl.dump(annotations, open('%s/gt/hard-negative-examples.pkl'%(pnr_dir), 'wb'))

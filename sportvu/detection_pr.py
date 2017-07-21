@@ -8,7 +8,7 @@ Usage:
 Arguments:
     <percent_grid> e.g. 5, prob_threshold = 0,5,10,15 ...
 Example:
-    python detection_pr.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25-bn.yaml nms1.yaml 5 --single
+    python detection_pr.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml nms1.yaml 5 --single
 """
 
 from __future__ import absolute_import

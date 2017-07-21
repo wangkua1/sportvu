@@ -49,7 +49,7 @@ class Event:
         '0021500196' q1 home: 0
         '0021500188' q1 home: 0
         """
-        hard_code = {'0021500357':0, '0021500150':1, '0021500278':0, '0021500196': 0, '0021500188':0}
+        hard_code = {'0021500357': 0, '0021500150': 1, '0021500278': 0, '0021500196': 0, '0021500188': 0}
         self.home_basket = (hard_code[self.gameid] + (self.moments[0].quarter > 2))%2
 
     def is_home_possession(self, moment):
