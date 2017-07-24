@@ -20,7 +20,7 @@ extractor_config:
     jitter: [1, 1]
     #parametrization
     video: False
-    jump_threshold: 8.0 # if distance is larger it is a jump if frame and should be broken up.
+    jump_threshold: 9.0 # if distance is larger it is a jump if frame and should be broken up.
     crop: 'bmf' #{'bmf', 'tb'} #bmf=Ball-Mid-Frame, tb=Track-Ball
     crop_size: [25,25] # in units of ft
     min_length: 25 # shortest length to consider

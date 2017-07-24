@@ -229,7 +229,7 @@ class EthanSeqExtractor(BaseExtractor):
             # sequences = [np.array(make_3teams_11players(self.extract_raw(e,dont_resolve_basket=dont_resolve_basket, sorted=sort_player))) for e in events_arr]
         if add_velocity:
             sequences = self._add_velocity(sequences) #TODO
-        sequences, mask = self._remove_jumps(sequences)
+        sequences, labels, mask = self._remove_jumps(sequences)
 
         if self.augment and np.sum(self.config['jitter']) > 0:
             d0_jit = (np.random.rand() * 2 - 1) * self.config['jitter'][0]
@@ -238,19 +238,22 @@ class EthanSeqExtractor(BaseExtractor):
             # missing player)
             try:
                 sequences[:, :, :, 0] += d0_jit
+                labels[:, :, :, 0] +=d0_jit
             except:
                 raise ExtractorException()
             sequences[:, :, :, 1] += d1_jit
+            labels[:, :, :, 1] += d1_jit
         if self.augment and self.config['d0flip'] == True:
-            for seq in sequences:
+            for ii in range(sequences.shape[0]):
                 if np.random.rand()>0.5:
-                    seq[:,:,0] = Y_RANGE-seq[:,:,0]
+                    sequences[ii,:,:,0] = Y_RANGE-sequences[ii,:,:,0]
+                    labels[ii, :, :, 0] = Y_RANGE - labels[ii, :, :, 0]
         if self.augment and self.config['d1flip'] == True:
-            for seq in sequences:
+            for ii in range(sequences.shape[0]):
                 if np.random.rand()>0.5:
-                    seq[:,:,1] = X_RANGE-seq[:,:,1]
-
-        return sequences, mask
+                    sequences[ii,:,:,1] = X_RANGE-sequences[ii,:,:,1]
+                    labels[ii, :, :, 1] = X_RANGE - labels[ii, :, :, 1]
+        return sequences, labels, mask
 
     def _remove_jumps(self, sequences):
         new_sequences = []
@@ -258,13 +261,13 @@ class EthanSeqExtractor(BaseExtractor):
             dist = ((seq[:,:-1,:]-seq[:,1:,:])**2).sum(axis=2).sum(axis=0)
             jumps = [i  for i in range(len(dist)) if dist[i] > self.thresh]
             if len(jumps)>0:
-                print "{} jumps detected. Min dist = {}".format(len(jumps), dist[jumps].min())
+                # print "{} jumps detected. Min dist = {}".format(len(jumps), dist[jumps].min())
                 seq = np.split(seq, jumps, axis=1)
             else:
                 seq = [seq]
             for x in seq:
                 # print x.shape
-                if x.shape[1]>self.max_length:
+                if x.shape[1]>self.max_length+3:
                     idx = np.random.randint(low=0, high=x.shape[1]-self.max_length-2)
                     new_sequences.append(x[:,idx:idx+self.max_length+1,:])
                 elif x.shape[1]>self.min_length:
@@ -277,7 +280,7 @@ class EthanSeqExtractor(BaseExtractor):
         masks = np.zeros((new_sequences.shape[0],new_sequences.shape[2]))
         for i in range(masks.shape[0]):
             masks[i,:lengths[i]] = 1
-        labels = new_sequences[:,:,1:,:]
+        labels = copy(new_sequences[:,:,1:,:])
         new_sequences = new_sequences[:,:,:-1,:]
         masks = masks[:,1:]  # important not :-1
         return new_sequences, labels, masks
