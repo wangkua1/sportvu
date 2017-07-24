@@ -29,6 +29,7 @@ import yaml
 import gc
 import cPickle as pkl
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from sportvu.model.convnet2d import ConvNet2d
 from sportvu.model.convnet3d import ConvNet3d
@@ -216,6 +217,13 @@ def detect_from_prob(data_config, model_config, detect_config, exp_name, fold_in
         plt.clf()
 
     pkl.dump(annotations, open('%s/gt/from-raw-examples.pkl'%(pnr_dir), 'wb'))
+    annotations = pd.DataFrame(annotations)
+    game_ids = annotations.loc[:,'gameid'].drop_duplicates(inplace=False).values
+    for game_id in game_ids:
+        annotations_game = annotations.loc[annotations.gameid == game_id,:]
+        annotations_game = annotations_game.sort(['eid'], ascending=[1])
+        annotations_game.to_csv('%s/detect-%s.csv' % (pnr_dir, game_id), index=False)
+
 
 
 if __name__ == '__main__':
