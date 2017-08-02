@@ -18,6 +18,8 @@ class EncDec:
         self.decoder_time_size = config['decoder_time_size']
         self.enc_rnn_hid_dim = config['enc_rnn_hid_dim']
         self.dec_rnn_hid_dim = config['dec_rnn_hid_dim']
+        self.dec_input_dim = config['dec_input_dim']
+        self.dec_output_dim = config['dec_output_dim']
         assert (self.enc_rnn_hid_dim == self.dec_rnn_hid_dim) ## right now doesn't support rnns of diff size, feels it might be harder to optimize
         self.encoder_input_shape = config['encoder_input_shape']
         if self.encoder_input_shape is not None:
@@ -38,7 +40,7 @@ class EncDec:
 
     def build(self):
         # placeholders
-        tf_dec_input = tf.placeholder(tf.float32, [self.batch_size, self.decoder_time_size, 2])
+        tf_dec_input = tf.placeholder(tf.float32, [self.batch_size, self.decoder_time_size, self.dec_input_dim])
         keep_prob = tf.placeholder(tf.float32)
         if self.decoder_init_noise is not None:
             self.pl_decoder_noise_level = tf.placeholder(tf.float32, [])
@@ -86,12 +88,12 @@ class EncDec:
         tf_glue_1 = tf.Variable(tf.eye(self.dec_rnn_hid_dim))
         tf_glue_2 = tf.Variable(tf.eye(self.dec_rnn_hid_dim))
         # [dec] pre-rnn
-        self.W_dec_inp_hid = weight_variable([2, self.dec_rnn_hid_dim])
+        self.W_dec_inp_hid = weight_variable([self.dec_input_dim, self.dec_rnn_hid_dim])
         self.b_dec_inp_hid = bias_variable([self.dec_rnn_hid_dim])
         # [dec] rnn 
         dec_cell = tf.contrib.rnn.BasicLSTMCell(self.dec_rnn_hid_dim, state_is_tuple=True)
         # [dec] post-rnn
-        self.W_dec_out_hid = weight_variable([self.dec_rnn_hid_dim, 2])
+        self.W_dec_out_hid = weight_variable([self.dec_rnn_hid_dim, self.dec_output_dim])
         # self.b_dec_out_hid = bias_variable([2]) ### probably don't need output bias
         
         ## Build Graph
@@ -197,10 +199,11 @@ class EncDec:
             if enc_keep_prob is None:
                 enc_keep_prob = self.keep_prob_value
             ret_dict[self.keep_prob] = enc_keep_prob
-        if decoder_noise_level is None:
-            ret_dict[self.pl_decoder_noise_level] = self.decoder_noise_level
-        else:
-            ret_dict[self.pl_decoder_noise_level] = decoder_noise_level
+        if self.decoder_init_noise is not None:
+            if decoder_noise_level is None:
+                ret_dict[self.pl_decoder_noise_level] = self.decoder_noise_level
+            else:
+                ret_dict[self.pl_decoder_noise_level] = decoder_noise_level
         if self.decoder_input_keep_prob is not None:
             if decoder_input_keep_prob is None:
                 ret_dict[self.pl_decoder_input_keep_prob] = self.decoder_input_keep_prob

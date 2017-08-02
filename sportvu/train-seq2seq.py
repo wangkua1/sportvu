@@ -36,7 +36,7 @@ from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import Seq2SeqExtractor, EncDecExtractor
 from sportvu.data.loader import Seq2SeqLoader
 # concurrent
-from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
+# from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
 from tqdm import tqdm
 from docopt import docopt
 import yaml
@@ -73,7 +73,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     y_ = tf.placeholder(tf.float32,
                         [model_config['model_config']['batch_size'],
                          model_config['model_config']['decoder_time_size'],
-                         2])
+                         model_config['model_config']['dec_output_dim']])
     learning_rate = tf.placeholder(tf.float32, [])
     # euclid_loss = tf.reduce_mean(tf.pow(net.output() - y_, 2))
     euclid_loss = tf.reduce_mean(tf.pow(tf.reduce_sum(tf.pow(net.output() - y_, 2), axis=-1),.5))
@@ -207,8 +207,14 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 val_real_loss.append(val_loss)
                 ### plot
                 pred = sess.run(net.output(), feed_dict = feed_dict)
-                gt_future = experpolate_position(history[:,pid,-1], dec_output)
-                pred_future = experpolate_position(history[:,pid,-1], pred)
+                if pid is not None:
+                    start_frame = history[:,pid, -1]
+                else:
+                    start_frame = history[:,:,-1]
+
+                gt_future = experpolate_position(start_frame, dec_output)
+                pred_future = experpolate_position(start_frame, pred)
+
                 # imgs = make_sequence_prediction_image(history, gt_future, pred_future, pid)
                 pkl.dump((history, gt_future, pred_future, pid),
                           open(os.path.join("./logs/"+exp_name, 'iter-%g.pkl'%(iter_ind)),'wb'))

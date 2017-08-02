@@ -1,6 +1,13 @@
 from __future__ import division
 import numpy as np
 
+def wrapper_concatenated_last_dim(f,s,**kwargs):
+    assert (s.shape[-1]==22)
+    ret_list = []
+    for entity_idx in xrange(11):
+        ret_list.append(f(s[...,entity_idx*2:(entity_idx+1)*2], **kwargs))
+    return np.concatenate(ret_list, -1)
+
 
 def shuffle_2_array(x, y):
     randomize = np.arange(len(x))
@@ -9,12 +16,21 @@ def shuffle_2_array(x, y):
     y = y[randomize]
     return x, y
 
-def scale_last_dim(s, d1_range=100,d2_range=50,upscale=False):
+def scale_last_dim(s, d1_range=100,d2_range=50,upscale=False, zero_center=True):
+    assert (s.shape[-1] == 2)
+    if zero_center:
+        shift1 = d1_range/2.
+        shift2 = d2_range/2.
+    else:
+        shift1 = 0.
+        shift2 = 0.
+
     if upscale:
-        d1_range = 1/d1_range
-        d2_range = 1/d2_range
-    s[...,0] = s[...,0] / d1_range
-    s[...,1] = s[...,1] / d2_range
+        s[...,0] = s[...,0]*d1_range+shift1
+        s[...,1] = s[...,1]*d2_range+shift2
+    else:
+        s[...,0] = (s[...,0]-shift1) / d1_range
+        s[...,1] = (s[...,1]-shift2) / d2_range
     return s
 
 def create_circle(radius):
