@@ -27,8 +27,8 @@ import os
 if os.environ['HOME'] == '/u/wangkua1':  # jackson guppy
     sys.path.append('/u/wangkua1/toolboxes/resnet')
 else:
-    sys.path.append('/ais/gobi4/slwang/sports/sportvu/resnet')
-    sys.path.append('/ais/gobi4/slwang/sports/sportvu')
+    sys.path.append('/home/ethanf/gobi4/slwang/sports/sportvu/resnet')
+    sys.path.append('/home/ethanf/slwang/sports/sportvu')
 from sportvu.model.seq2seq import Seq2Seq
 from sportvu.model.encdec import EncDec
 # data
@@ -52,7 +52,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     # Initialize dataset/loader
     dataset = BaseDataset(data_config, fold_index, load_raw=False)
     extractor = eval(data_config['extractor_class'])(data_config)
-    if 'negative_fraction_hard' in data_config:
+    if 'negati`ve_fraction_hard' in data_config:
         nfh = data_config['negative_fraction_hard']
     else:
         nfh = 0
