@@ -2,9 +2,9 @@ from __future__ import division
 import numpy as np
 
 def wrapper_concatenated_last_dim(f,s,**kwargs):
-    assert (s.shape[-1]==22)
+    # assert (s.shape[-1]==22)
     ret_list = []
-    for entity_idx in xrange(11):
+    for entity_idx in xrange(s.shape[-1]//2):
         ret_list.append(f(s[...,entity_idx*2:(entity_idx+1)*2], **kwargs))
     return np.concatenate(ret_list, -1)
 

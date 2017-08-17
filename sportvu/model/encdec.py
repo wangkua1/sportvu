@@ -194,7 +194,7 @@ class EncDec:
         else:
             assert (teacher_forcing_stop >= 1) # has to at least feed in the first frame
             ret_dict[self.teacher_forcing_stop] = int(teacher_forcing_stop)
-        if enc_input is not None:
+        if self.encoder_input_shape is not None:
             ret_dict[self.tf_enc_input] = enc_input
             if enc_keep_prob is None:
                 enc_keep_prob = self.keep_prob_value

@@ -255,6 +255,9 @@ class EncDecExtractor(BaseExtractor):
         super(self.__class__, self).__init__(f_config)
 
     def _format(self, x,  data_format):
+        """
+        x shape (N, T, D)
+        """
         if data_format == 'velocity':
             return x[:, 1:] - x[:, :-1]
         if data_format == 'location':
@@ -314,17 +317,13 @@ class EncDecExtractor(BaseExtractor):
             return dec_input, output, enc_input , (sequences[:, :, start_time:start_time+self.config['encoder_input_time']], None)
         else:
             output_m1 = output_m1[:,target_player_ind]
-            output = output_m1[:,2:] - output_m1[:,1:-1]
-            dec_input = output_m1[:,1:-1] - output_m1[:,:-2]
+            output = self._format(output_m1[:,1:], self.config['output_format'])
+            dec_input = self._format(output_m1[:,:-1], self.config['decoder_input_format'])
             ## Encoder Input
             if 'encoder_type' in self.config:
                 if self.config['encoder_type'] == 'target-seq':
-                    abs_seq = input_seq_m1[:, target_player_ind, 1:]
-                    abs_seq = scale_last_dim(abs_seq)
-                    m1_v_seq = input_seq_m1[:, target_player_ind, 1:] - input_seq_m1[:, target_player_ind, :-1]
-                    enc_input = np.concatenate([abs_seq, m1_v_seq], axis=-1)
-                    return dec_input, output, enc_input, (sequences[:, :, start_time:start_time+self.config['encoder_input_time']], target_player_ind)
-                            # , sequences[:, :, start_time+self.config['encoder_input_time']:start_time+self.config['encoder_input_time']+self.config['decoder_input_time']])
+                    input_seq_m1 = input_seq_m1[:, target_player_ind]
+                    enc_input = self._format(input_seq_m1, self.config['encoder_input_format'])
                 elif self.config['encoder_type'] in ['3d', '2d']:
                     bctxy = pictorialize_fast(input_seq_m1, sample_rate, Y_RANGE, X_RANGE, keep_channels=True)
                     # if self.augment and self.config['d0flip'] and np.random.rand > .5:
@@ -344,9 +343,10 @@ class EncDecExtractor(BaseExtractor):
                         seq_inp = seq_inp.sum(2)[None]
                         seq_inp = np.transpose(seq_inp, (1,2,0,3,4))
                     seq_inp[seq_inp>1] = 1
-                    return dec_input, output, seq_inp, (sequences[:, :, start_time:start_time+self.config['encoder_input_time']], target_player_ind)
+                    enc_input = seq_inp
             else: #NO encoder
-                return dec_input, output, None, (sequences[:, :, start_time:start_time+self.config['encoder_input_time']], target_player_ind)
+                enc_input = None
+            return dec_input, output, enc_input, (sequences[:, :, start_time:start_time+self.config['encoder_input_time']], target_player_ind)
 """
 HalfCourt Extractor
 This extractor takes the Event
