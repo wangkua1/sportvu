@@ -3,7 +3,10 @@ import tensorflow as tf
 import numpy as np
 from utils import * 
 
-class EncDec:
+
+
+
+class EncDec(object):
     """
     Encoder-Decoder Model (for single sequence future prediction problem)
         Encoder could be arbitrarily complex
@@ -213,7 +216,31 @@ class EncDec:
 
     def output(self):
         return self.outputs
+    def aux_feed_dict(self, aux, feed_dict):
+        pass
 
+class Location(EncDec):
+    """docstring for Location"""
+    def __init__(self, arg):
+        super(self.__class__, self).__init__(arg)
+    def sample_trajectory(self):
+        return self.outputs
+
+class Velocity(EncDec):
+    """docstring for Velocity"""
+    def __init__(self, arg):
+        super(self.__class__, self).__init__(arg)
+        self.tf_start_frame = tf.placeholder(tf.float32, [self.batch_size, self.dec_input_dim])
+
+    def aux_feed_dict(self, aux, feed_dict):
+        feed_dict[self.tf_start_frame] = aux['start_frame']
+
+    def sample_trajectory(self):
+        vels = self.outputs # (N, T, D)
+        traj = [self.tf_start_frame]
+        for time_idx in xrange(self.decoder_time_size):
+            traj.append(vels[:,time_idx] +traj[-1])
+        return tf.transpose(traj[1:], [1,0,2])
 
 if __name__ == '__main__':
 

@@ -30,7 +30,7 @@ else:
     sys.path.append('/ais/gobi4/slwang/sports/sportvu/resnet')
     sys.path.append('/ais/gobi4/slwang/sports/sportvu')
 from sportvu.model.seq2seq import Seq2Seq
-from sportvu.model.encdec import EncDec
+from sportvu.model.encdec import EncDec, Velocity, Location
 # data
 from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import Seq2SeqExtractor, EncDecExtractor
@@ -223,7 +223,11 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 #     plt.imshow(imgs[i])
                 #     plt.savefig(os.path.join("./saves/", exp_name +'iter-%g-%g.png'%(iter_ind,i)))
                 
-                
+
+                ## TODO: always monitor loss using trajectory
+                net.aux_feed_dict({'start_frame':start_frame}, feed_dict)
+                traj = sess.run(net.sample_trajectory(), feed_dict = feed_dict)
+
             ## TODO: evaluate real-loss on training set
             val_tf_loss = np.mean(val_tf_loss)
             val_real_loss = np.mean(val_real_loss)
