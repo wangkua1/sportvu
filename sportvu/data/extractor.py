@@ -293,21 +293,25 @@ class EncDecExtractor(BaseExtractor):
             target_player_ind = player_id
         N_total_frames = sequences.shape[2]
         if self.augment:
-            start_time =  1+np.round((np.random.rand() * (N_total_frames - 
-                            (2+self.config['encoder_input_time']+self.config['decoder_input_time']))
+            start_time =  2+np.round((np.random.rand() * (N_total_frames - 
+                            (3+self.config['encoder_input_time']+self.config['decoder_input_time']))
                             )).astype('int32') 
         else:
             start_time = N_total_frames // 2 - self.config['encoder_input_time']
-        input_seq_m1 = np.array(sequences,copy=True)[:, :, start_time-1:start_time+self.config['encoder_input_time']]
+        input_seq_m1 = np.array(sequences,copy=True)[:, :, start_time-2:start_time+self.config['encoder_input_time']-1]
         output_m1 =  np.array(sequences,copy=True)[:, :,
                                   -1+start_time+self.config['encoder_input_time'] 
                                  :1+start_time+self.config['encoder_input_time']+self.config['decoder_input_time']]
         if 'predict_all' in self.config and self.config['predict_all']:
-            # WARNING: currently, predict_all means there's no encoder as well
             output_m1 = np.concatenate(np.transpose(output_m1, (1,0,2,3)), -1)
+            input_seq_m1 = np.concatenate(np.transpose(input_seq_m1, (1,0,2,3)), -1)
             output = self._format(output_m1[:,1:], self.config['output_format'])
             dec_input = self._format(output_m1[:,:-1], self.config['decoder_input_format'])
-            return dec_input, output, None, (sequences[:, :, start_time:start_time+self.config['encoder_input_time']], None)
+            if 'encoder_input_format' in self.config:
+                enc_input = self._format(input_seq_m1, self.config['encoder_input_format'])
+            else:
+                enc_input = None
+            return dec_input, output, enc_input , (sequences[:, :, start_time:start_time+self.config['encoder_input_time']], None)
         else:
             output_m1 = output_m1[:,target_player_ind]
             output = output_m1[:,2:] - output_m1[:,1:-1]

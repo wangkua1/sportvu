@@ -210,7 +210,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 if pid is not None:
                     start_frame = history[:,pid, -1]
                 else:
-                    start_frame = history[:,:,-1]
+                    start_frame = history[:,:,-1].reshape(history.shape[0],-1)
 
                 gt_future = experpolate_position(start_frame, dec_output)
                 pred_future = experpolate_position(start_frame, pred)
