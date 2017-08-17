@@ -1,7 +1,7 @@
 """train-seq2seq.py
 
 Usage:
-    train-seq2seq.py <fold_index> <f_data_config> <f_model_config>
+    train-seq2seq.py <fold_index> <f_data_config> <f_model_config> <loss>
     train-seq2seq.py --test <fold_index> <f_data_config> <f_model_config>
 
 Arguments:
@@ -35,6 +35,8 @@ from sportvu.model.encdec import EncDec
 from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import Seq2SeqExtractor, EncDecExtractor
 from sportvu.data.loader import Seq2SeqLoader
+# loss
+from loss import RMSEPerPlayer
 # concurrent
 # from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
 from tqdm import tqdm
@@ -48,7 +50,7 @@ import cPickle as pkl
 # plt.ioff()
 # fig = plt.figure()
 
-def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, testing=False):
+def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, loss_class, testing=False):
     # Initialize dataset/loader
     dataset = BaseDataset(data_config, fold_index, load_raw=False)
     extractor = eval(data_config['extractor_class'])(data_config)
@@ -75,19 +77,17 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                          model_config['model_config']['decoder_time_size'],
                          model_config['model_config']['dec_output_dim']])
     learning_rate = tf.placeholder(tf.float32, [])
-    # euclid_loss = tf.reduce_mean(tf.pow(net.output() - y_, 2))
-    euclid_loss = tf.reduce_mean(tf.pow(tf.reduce_sum(tf.pow(net.output() - y_, 2), axis=-1),.5))
+
+    loss = loss_class.build_tf_loss(net.output(), y_)
+    
 
     global_step = tf.Variable(0)
-    # train_step = optimize_loss(euclid_loss, global_step, learning_rate,
+    # train_step = optimize_loss(loss, global_step, learning_rate,
     #                            optimizer=lambda lr: tf.train.AdamOptimizer(lr),
     #                            clip_gradients=0.01)
-    train_step = optimize_loss(euclid_loss, global_step, learning_rate,
+    train_step = optimize_loss(loss, global_step, learning_rate,
                                optimizer=lambda lr: tf.train.RMSPropOptimizer(lr),
                                clip_gradients=0.01)
-    # train_step = optimize_loss(cross_entropy, global_step, learning_rate,
-    #             optimizer=lambda lr: tf.train.MomentumOptimizer(lr, .9))
-
     # # testing
     # if testing:
     #     saver = tf.train.Saver()
@@ -113,7 +113,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     v_rloss = tf.Variable(tf.constant(0.0), trainable=False)
     v_rloss_pl = tf.placeholder(tf.float32, shape=[])
     update_v_rloss = tf.assign(v_rloss, v_rloss_pl)
-    tf.summary.scalar('euclid_loss', euclid_loss)
+    tf.summary.scalar('loss', loss)
     tf.summary.scalar('valid_loss', v_loss)
     tf.summary.scalar('real_valid_loss', v_rloss)
     # tf.summary.image('encoder_input', tf.transpose(
@@ -192,7 +192,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                                 decoder_input_keep_prob = 1.
                                 )
                 feed_dict[y_] = dec_output
-                val_loss = sess.run(euclid_loss, feed_dict = feed_dict)
+                val_loss = sess.run(loss, feed_dict = feed_dict)
                 val_tf_loss.append(val_loss)
                 ## real-loss
                 feed_dict = net.input(dec_input, 
@@ -203,7 +203,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                                 decoder_input_keep_prob = 1.
                                 )
                 feed_dict[y_] = dec_output
-                val_loss = sess.run(euclid_loss, feed_dict = feed_dict)
+                val_loss = sess.run(loss, feed_dict = feed_dict)
                 val_real_loss.append(val_loss)
                 ### plot
                 pred = sess.run(net.output(), feed_dict = feed_dict)
@@ -259,11 +259,11 @@ if __name__ == '__main__':
     model_config = yaml.load(open(f_model_config, 'rb'))
     model_name = os.path.basename(f_model_config).split('.')[0]
     data_name = os.path.basename(f_data_config).split('.')[0]
-    exp_name = '%s-X-%s' % (model_name, data_name)
+    exp_name = '%s-X-%s-X-%s' % (model_name, data_name,arguments['<loss>'])
     fold_index = int(arguments['<fold_index>'])
     init_lr = 1e-4
     max_iter = 100000
     best_acc_delay = 3000
     testing = arguments['--test']
     train(data_config, model_config, exp_name, fold_index,
-          init_lr, max_iter, best_acc_delay, testing)
+          init_lr, max_iter, best_acc_delay, eval(arguments['<loss>'])(),testing)
