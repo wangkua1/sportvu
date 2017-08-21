@@ -19,7 +19,8 @@ class FullGaussNLL(object):
                                  axis=-1)  # Sigma_inv = R^TR cholasky upper decomp
         R_trans = fill_lower_triangular(tf.nn.softplus(R_trans) + eps)
 
-        diff_shape = [s.value for s in y_.shape].append(1)
+        diff_shape = [s.value for s in y_.shape]\
+        diff_shape.append(1)
         diff = tf.reshape(mean - y_, diff_shape)
         diff_loss = tf.reduce_mean(tf.pow(tf.matmul(R_trans, diff), 2))
         normalizer_loss = tf.reduce_mean(tf.log(tf.matrix_diag_part(R_trans)))
