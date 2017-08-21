@@ -222,12 +222,17 @@ class EncDec(object):
 class Propobilistic(EncDec):
     """docstring for Location"""
     def __init__(self, arg):
-        super(self.__class__, self).__init__(arg)
+        super(Propobilistic, self).__init__(arg)
         if 'truncate_D' in arg:
             self.truncate_D = arg['truncate_D']
+        else:
+            self.truncate_D = None
     def sample(self): ## TODO: a real sampling scheme rather than MAP...
-        return self.outputs[...,:self.truncate_D]
-        
+        if self.truncate_D is not None:
+            return self.outputs[...,:self.truncate_D]
+        else:
+            return self.outputs
+
 class Location(Propobilistic):
     """docstring for Location"""
     def __init__(self, arg):
