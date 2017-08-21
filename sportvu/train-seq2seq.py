@@ -35,15 +35,16 @@ from sportvu.model.encdec import EncDec, Velocity, Location
 from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import Seq2SeqExtractor, EncDecExtractor
 from sportvu.data.loader import Seq2SeqLoader
+from sportvu.data.utils import wrapper_concatenated_last_dim, scale_last_dim
 # loss
-from loss import RMSEPerPlayer
+from loss import RMSEPerPlayer, DiagGaussNLL, FullGaussNLL
 # concurrent
 # from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
 from tqdm import tqdm
 from docopt import docopt
 import yaml
 import gc
-from utils import truncated_mean, experpolate_position
+from utils import truncated_mean, experpolate_position,dist_trajectory
 from vis_utils import make_sequence_prediction_image
 import cPickle as pkl
 # import matplotlib.pylab as plt
@@ -113,9 +114,13 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     v_rloss = tf.Variable(tf.constant(0.0), trainable=False)
     v_rloss_pl = tf.placeholder(tf.float32, shape=[])
     update_v_rloss = tf.assign(v_rloss, v_rloss_pl)
+    v_tloss = tf.Variable(tf.constant(0.0), trainable=False)
+    v_tloss_pl = tf.placeholder(tf.float32, shape=[])
+    update_v_tloss = tf.assign(v_tloss, v_tloss_pl)
     tf.summary.scalar('loss', loss)
     tf.summary.scalar('valid_loss', v_loss)
     tf.summary.scalar('real_valid_loss', v_rloss)
+    tf.summary.scalar('real_traj_loss', v_tloss)
     # tf.summary.image('encoder_input', tf.transpose(
     #     tf.reduce_sum(net.tf_enc_input, 2), (0, 2, 3, 1))[:,:,:,:-1], max_outputs=4)
     # tf.summary.image('decoder_input', tf.transpose(
@@ -174,6 +179,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
         if iter_ind % 1000 == 0:
             val_tf_loss = []
             val_real_loss = []
+            val_traj_loss = []
             ## loop throught valid examples
             while True:
                 loaded = cloader.load_valid()
@@ -227,15 +233,25 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 ## TODO: always monitor loss using trajectory
                 net.aux_feed_dict({'start_frame':start_frame}, feed_dict)
                 traj = sess.run(net.sample_trajectory(), feed_dict = feed_dict)
-
+                if model_config['class_name'] == 'Location': ### scale 
+                    traj = wrapper_concatenated_last_dim(scale_last_dim, traj, upscale=True)
+                    gt_traj = wrapper_concatenated_last_dim(scale_last_dim, dec_output, upscale=True)
+                elif model_config['class_name'] == 'Velocity':
+                    gt_traj = gt_future[:,1:]
+                else:
+                    raise NotImplementedError
+                l_traj = dist_trajectory(traj, gt_traj)
+                val_traj_loss.append(l_traj)
             ## TODO: evaluate real-loss on training set
             val_tf_loss = np.mean(val_tf_loss)
             val_real_loss = np.mean(val_real_loss)
-            print ('[Iter: %g] Train Loss: %g, Validation TF Loss: %g | Real Loss: %g ' %(iter_ind,np.mean(train_loss),val_tf_loss, val_real_loss))
+            val_traj_loss = np.mean(val_traj_loss)
+            print ('[Iter: %g] Train Loss: %g, Validation TF Loss: %g | Real Loss: %g | Real Traj Loss: %g' %(iter_ind,np.mean(train_loss),val_tf_loss, val_real_loss, val_traj_loss))
             train_loss = []
             feed_dict[v_loss_pl] = val_tf_loss
             feed_dict[v_rloss_pl] = val_real_loss
-            _,_, summary = sess.run([update_v_loss,update_v_rloss, merged], feed_dict=feed_dict)
+            feed_dict[v_tloss_pl] = val_traj_loss
+            _,_,_, summary = sess.run([update_v_loss,update_v_rloss,update_v_tloss, merged], feed_dict=feed_dict)
             val_writer.add_summary(summary, iter_ind)
             if val_real_loss < best_val_real_loss:
                 best_not_updated = 0
