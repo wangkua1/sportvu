@@ -219,14 +219,23 @@ class EncDec(object):
     def aux_feed_dict(self, aux, feed_dict):
         pass
 
-class Location(EncDec):
+class Propobilistic(EncDec):
+    """docstring for Location"""
+    def __init__(self, arg):
+        super(self.__class__, self).__init__(arg)
+        if 'truncate_D' in arg:
+            self.truncate_D = arg['truncate_D']
+    def sample(self): ## TODO: a real sampling scheme rather than MAP...
+        return self.outputs[...,:self.truncate_D]
+        
+class Location(Propobilistic):
     """docstring for Location"""
     def __init__(self, arg):
         super(self.__class__, self).__init__(arg)
     def sample_trajectory(self):
-        return self.outputs
+        return self.sample()
 
-class Velocity(EncDec):
+class Velocity(Propobilistic):
     """docstring for Velocity"""
     def __init__(self, arg):
         super(self.__class__, self).__init__(arg)
@@ -236,7 +245,7 @@ class Velocity(EncDec):
         feed_dict[self.tf_start_frame] = aux['start_frame']
 
     def sample_trajectory(self):
-        vels = self.outputs # (N, T, D)
+        vels = self.sample() # (N, T, D)
         traj = [self.tf_start_frame]
         for time_idx in xrange(self.decoder_time_size):
             traj.append(vels[:,time_idx] +traj[-1])
