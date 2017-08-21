@@ -23,9 +23,10 @@ extractor_config:
     d1flip: True
     jitter: [3, 3]
     #parametrization
-    encoder_input_time: 20
+    encoder_input_time: 10
     decoder_input_time: 20
-    predict_all: True
+    predict_all: False
+    encoder_input_format: 'location'
     output_format: 'velocity' #{'location', 'velocity', 'acceleration'}
     decoder_input_format: 'velocity' #{'location', 'velocity', 'acceleration'}
     encoder_type: 'target-seq' # {'target-seq', '3d', '2d'}
