@@ -1,9 +1,9 @@
 import tensorflow as tf
 
 
-class diag_gauss_NLL(object):
+class full_gauss_NLL(object):
     def __init__(self):
-        super(diag_gauss_NLL, self).__init__()
+        super(full_gauss_NLL, self).__init__()
 
     def build_tf_loss(self, pred, y_, eps=1e-5):
         """

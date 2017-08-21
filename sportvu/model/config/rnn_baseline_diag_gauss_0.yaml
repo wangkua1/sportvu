@@ -8,7 +8,7 @@ model_config:
     decoder_time_size: 20
     batch_size: *batch_size
     dec_input_dim: 22
-    dec_output_dim: 22
+    dec_output_dim: 44
     ## encoder
     encoder_input_shape:
     enc_rnn_hid_dim: *rnn_hid

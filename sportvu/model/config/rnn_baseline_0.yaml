@@ -3,7 +3,8 @@ node2: &rnn_hid 64
 
 class_name: EncDec
 ### Dataset Configuration
-model_config: 
+model_config:
+    loss: euclid_loss
     dec_rnn_hid_dim: *rnn_hid
     decoder_time_size: 20
     batch_size: *batch_size
