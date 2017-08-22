@@ -1,3 +1,4 @@
+from __future__ import division
 import tensorflow as tf
 from tensorflow.python.ops.distributions.util import fill_lower_triangular
 
@@ -14,9 +15,9 @@ class FullGaussNLL(object):
         pred shape (N, T, k+k*(k-1)/2)
 
         """
-        pred_dim = y_.get_shape()[-1].value()
-        mean, R_trans = tf.split(pred, [pred_dim, pred_dim * (pred_dim + 1) / 2],
-                                 axis=-1)  # Sigma_inv = R^TR cholasky upper decomp
+        pred_dim = y_.get_shape()[-1].value
+        mean, R_trans = tf.split(pred, [pred_dim, int(pred_dim * (pred_dim + 1) / 2)],
+                                 axis=2)  # Sigma_inv = R^TR cholasky upper decomp
         R_trans = fill_lower_triangular(tf.nn.softplus(R_trans) + eps)
 
         diff_shape = [s.value for s in y_.shape]
