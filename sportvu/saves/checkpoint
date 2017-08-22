@@ -1,6 +1,0 @@
-model_checkpoint_path: "edd-full-2d-dropout-X-rev3-ed-full-2d98000.ckpt"
-all_model_checkpoint_paths: "edd-full-2d-dropout-X-rev3-ed-full-2d90000.ckpt"
-all_model_checkpoint_paths: "edd-full-2d-dropout-X-rev3-ed-full-2d92000.ckpt"
-all_model_checkpoint_paths: "edd-full-2d-dropout-X-rev3-ed-full-2d94000.ckpt"
-all_model_checkpoint_paths: "edd-full-2d-dropout-X-rev3-ed-full-2d96000.ckpt"
-all_model_checkpoint_paths: "edd-full-2d-dropout-X-rev3-ed-full-2d98000.ckpt"
