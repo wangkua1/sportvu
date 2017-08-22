@@ -76,7 +76,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     y_ = tf.placeholder(tf.float32,
                         [model_config['model_config']['batch_size'],
                          model_config['model_config']['decoder_time_size'],
-                         model_config['model_config']['dec_output_dim']])
+                         model_config['model_config']['dec_input_dim']])
     learning_rate = tf.placeholder(tf.float32, [])
 
     loss = loss_class.build_tf_loss(net.output(), y_)
@@ -212,7 +212,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 val_loss = sess.run(loss, feed_dict = feed_dict)
                 val_real_loss.append(val_loss)
                 ### plot
-                pred = sess.run(net.output(), feed_dict = feed_dict)
+                pred = sess.run(net.sample(), feed_dict = feed_dict)
                 if pid is not None:
                     start_frame = history[:,pid, -1]
                 else:

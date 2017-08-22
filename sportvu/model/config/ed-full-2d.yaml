@@ -1,0 +1,19 @@
+node1: &batch_size 32
+node2: &rnn_hid 64
+
+class_name: EncDec
+### Dataset Configuration
+model_config: 
+    dec_rnn_hid_dim: *rnn_hid
+    decoder_time_size: 20
+    batch_size: *batch_size
+    ## encoder
+    encoder_input_shape: [*batch_size, 4, 1, 100, 50]
+    enc_rnn_hid_dim: *rnn_hid
+    keep_prob: .8
+    conv_layers: [[5,5,4,32],[5,5,32,32],[5,5,32,32]]
+    fc_layers: [256,*rnn_hid]
+    ## stochasticity
+    # decoder_init_noise: 'dropout' # {'gaussian', 'dropout'}
+    # noise_level: .3 ## 1-keep_value
+    # decoder_input_keep_prob: .5

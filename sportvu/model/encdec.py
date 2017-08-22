@@ -142,6 +142,7 @@ class EncDec(object):
 
         # build decoder
         dec_outputs = []
+        sampled_outputs = []
         if self.encoder_input_shape is not None:
             s1 = tf.matmul(enc_states[0],tf_glue_1)
             s2 = tf.matmul(enc_states[1],tf_glue_2)
@@ -167,7 +168,7 @@ class EncDec(object):
                     ## output (BATCH, 2)
                     ## select
                     tf_step_ind = tf.Variable(rnn_step_ind)
-                    input_ = tf.where(tf.greater_equal(tf_step_ind, self.teacher_forcing_stop),  output, input_)
+                    input_ = tf.where(tf.greater_equal(tf_step_ind, self.teacher_forcing_stop), sampled_output , input_)
                     input_ = tf.nn.dropout(input_, self.pl_decoder_input_keep_prob)
                 else: ## first step, always feed-in gt
                     pass
@@ -178,12 +179,15 @@ class EncDec(object):
                 # fc output
                 output = tf.matmul(h_rnn, self.W_dec_out_hid) 
                 dec_outputs.append(output)
+                sampled_output = self.sample_timestep(output)
+                sampled_outputs.append(sampled_output)
         
         
         self.tf_enc_input = tf_enc_input
         self.tf_dec_input = tf_dec_input
         self.keep_prob = keep_prob
         self.outputs = tf.transpose(dec_outputs, [1,0,2]) # -> (BATCH, TIME, 2)
+        self.sampled_outputs = tf.transpose(sampled_outputs, [1,0,2]) # -> (BATCH, TIME, 2)
 
     def input(self, dec_input, teacher_forcing_stop = None, 
                 enc_input=None, enc_keep_prob=None,decoder_noise_level=None, decoder_input_keep_prob=None):
@@ -223,15 +227,31 @@ class Propobilistic(EncDec):
     """docstring for Location"""
     def __init__(self, arg):
         super(Propobilistic, self).__init__(arg)
-        if 'truncate_D' in arg:
-            self.truncate_D = arg['truncate_D']
+        if 'sample' in arg and arg['sample'] is not None:
+            self.is_sample = True
+            self.sample_scheme = arg['sample'] # right now just 'gauss_diag','gauss_full', 'gauss_mean'
         else:
-            self.truncate_D = None
-    def sample(self): ## TODO: a real sampling scheme rather than MAP...
-        if self.truncate_D is not None:
-            return self.outputs[...,:self.truncate_D]
+            self.is_sample = False
+
+    def sample_timestep(self, curr_output):
+        """
+        curr_output is a tf variable holding the network output at the current time step
+        sample_timestep() should return a sample in the same shape as decoder_input (self.dec_input_dim])
+        """
+        if not self.is_sample: ## deterministic
+            return curr_output
+
+        if self.sample_scheme == 'gauss_mean':
+            return curr_output[..., :self.dec_input_dim]
+        elif self.sample_scheme == 'gauss_diag':
+            raise NotImplementedError
+        elif self.sample_scheme == 'gauss_full':
+            raise NotImplementedError
         else:
-            return self.outputs
+            raise Exception('unknown sampling scheme')
+
+    def sample(self): 
+        return self.sampled_outputs
 
 class Location(Propobilistic):
     """docstring for Location"""

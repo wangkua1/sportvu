@@ -1,7 +1,7 @@
 node1: &batch_size 32
 node2: &rnn_hid 64
 
-class_name: EncDec
+class_name: Velocity
 ### Dataset Configuration
 model_config: 
     dec_rnn_hid_dim: *rnn_hid
@@ -12,6 +12,8 @@ model_config:
     ## encoder
     encoder_input_shape:
     enc_rnn_hid_dim: *rnn_hid
+    ## sampling
+    sample: 'gauss_mean'
     ## stochasticity
     #decoder_init_noise: 'dropout' # {'gaussian', 'dropout'}
     #noise_level: .3 ## 1-keep_value
