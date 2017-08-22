@@ -1,7 +1,7 @@
 """train-seq2seq.py
 
 Usage:
-    train-seq2seq.py <fold_index> <f_data_config> <f_model_config> <loss>
+    train-seq2seq.py <fold_index> <f_data_config> <f_model_config> <loss> [--prefix <p>]
     train-seq2seq.py --test <fold_index> <f_data_config> <f_model_config>
 
 Arguments:
@@ -69,8 +69,10 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     #     loader, max_queue_size=Q_size, num_threads=N_thread)
     cloader = loader
 
-    net = eval(model_config['class_name'])(model_config['model_config'])
-    net.build()
+    with tf.variable_scope("main_model") as vs:
+        net = eval(model_config['class_name'])(model_config['model_config'])
+        net.build()
+        main_model_variables = [v for v in tf.all_variables() if v.name.startswith(vs.name)]
 
     # build loss
     y_ = tf.placeholder(tf.float32,
@@ -88,7 +90,8 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     #                            clip_gradients=0.01)
     train_step = optimize_loss(loss, global_step, learning_rate,
                                optimizer=lambda lr: tf.train.RMSPropOptimizer(lr),
-                               clip_gradients=0.01)
+                               clip_gradients=0.01, variables=main_model_variables)
+                               # clip_gradients=0.01, variables=None)
     # # testing
     # if testing:
     #     saver = tf.train.Saver()
@@ -280,6 +283,8 @@ if __name__ == '__main__':
     model_name = os.path.basename(f_model_config).split('.')[0]
     data_name = os.path.basename(f_data_config).split('.')[0]
     exp_name = '%s-X-%s-X-%s' % (model_name, data_name,arguments['<loss>'])
+    if arguments['--prefix']:
+        exp_name = arguments['<p>']+':'+exp_name
     fold_index = int(arguments['<fold_index>'])
     init_lr = 1e-4
     max_iter = 100000
