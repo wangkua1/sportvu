@@ -1,0 +1,2 @@
+python train-seq2seq.py 0 data/config/rnn_velocity_full_enc.yaml model/config/rnn_velocity_full_large.yaml RMSEPerPlayer
+python train-seq2seq.py 0 data/config/rnn_velocity_full_enc.yaml model/config/rnn_velocity_full_enc_large.yaml RMSEPerPlayer
