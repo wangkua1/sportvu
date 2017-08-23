@@ -22,7 +22,7 @@ class FullGaussNLL(object):
         diff_shape = [s.value for s in y_.shape]
         diff_shape.append(1)
         diff = tf.reshape(mean - y_, diff_shape)
-        diff_loss = tf.pow(tf.matmul(tf.transpose(R,[0,1,3,2], diff), 2))
+        diff_loss = tf.pow(tf.matmul(tf.transpose(R,[0,1,3,2]), diff), 2)
         diff_loss = tf.reduce_mean(tf.reduce_sum(diff_loss,axis=2))
         normalizer_loss = tf.log(tf.matrix_diag_part(R))
         normalizer_loss = tf.reduce_mean(tf.reduce_sum(normalizer_loss, axis=2))

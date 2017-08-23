@@ -13,7 +13,7 @@ model_config:
     encoder_input_shape:
     enc_rnn_hid_dim: *rnn_hid
     ## sampling
-    sample: 'gauss_mean'
+    sample: 'gauss_full'
     ## stochasticity
     #decoder_init_noise: 'dropout' # {'gaussian', 'dropout'}
     #noise_level: .3 ## 1-keep_value

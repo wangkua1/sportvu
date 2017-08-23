@@ -3,14 +3,13 @@ node2: &rnn_hid 64
 
 class_name: Velocity
 ### Dataset Configuration
-model_config: 
+model_config:
     dec_rnn_hid_dim: *rnn_hid
     decoder_time_size: 20
     batch_size: *batch_size
     dec_input_dim: 22
     dec_output_dim: 44
     dec_output_gt_dim: 22
-    sample: 'gauss_diag'
     ## encoder
     encoder_input_shape:
     enc_rnn_hid_dim: *rnn_hid

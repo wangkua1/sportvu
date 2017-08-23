@@ -26,6 +26,11 @@ import sys
 import os
 if os.environ['HOME'] == '/u/wangkua1':  # jackson guppy
     sys.path.append('/u/wangkua1/toolboxes/resnet')
+elif os.environ['HOME'] =='/u/ethanf':
+    sys.path.append('/ais/gobi5/ethanf/projects/sportvu/sportvu/resnet')
+    sys.path.append('/ais/gobi5/ethanf/projects/sportvu/sportvu')
+    sys.path.append('/ais/gobi5/ethanf/projects/sportvu/')
+    print(sys.path)
 else:
     sys.path.append('/ais/gobi4/slwang/sports/sportvu/resnet')
     sys.path.append('/ais/gobi4/slwang/sports/sportvu')

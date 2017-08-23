@@ -7,6 +7,8 @@ elif os.environ['HOME'] == '/u/slwang': ## shenlong guppy/pratt286b
     data_dir = '/ais/gobi5/wangkua1/data/csc2541/'
 elif os.environ['HOME'] =='/home/ethanf':
     data_dir = '/home/ethanf/gobi5/wangkua1/data/csc2541/'
+elif os.environ['HOME'] =='/u/ethanf':
+    data_dir = '/ais/gobi5/wangkua1/data/csc2541/'
 else:
     raise Exception("Unspecified data_dir, unknown environment")
 
