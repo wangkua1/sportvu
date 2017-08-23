@@ -1,5 +1,6 @@
 from __future__ import division
 import tensorflow as tf
+from tensorflow.python.ops.distributions.util import fill_lower_triangular
 import numpy as np
 from utils import * 
 
@@ -228,25 +229,41 @@ class Propobilistic(EncDec):
     def __init__(self, arg):
         super(Propobilistic, self).__init__(arg)
         if 'sample' in arg and arg['sample'] is not None:
-            self.is_sample = True
+            self.do_sample = True
             self.sample_scheme = arg['sample'] # right now just 'gauss_diag','gauss_full', 'gauss_mean'
         else:
-            self.is_sample = False
+            self.do_sample = False
 
-    def sample_timestep(self, curr_output):
+    def sample_timestep(self, curr_output, eps=1e-5):
         """
         curr_output is a tf variable holding the network output at the current time step
         sample_timestep() should return a sample in the same shape as decoder_input (self.dec_input_dim])
         """
-        if not self.is_sample: ## deterministic
+        if not self.do_sample: ## deterministic
             return curr_output
 
         if self.sample_scheme == 'gauss_mean':
             return curr_output[..., :self.dec_input_dim]
         elif self.sample_scheme == 'gauss_diag':
-            raise NotImplementedError
+            mean, pre_var = tf.split(curr_output, 2, axis=1)
+            var = tf.nn.softplus(pre_var) + eps
+            normal = tf.random_normal(mean.shape, 0, 1,
+                                   dtype=tf.float32)
+            return tf.add(mean, tf.multiply(tf.sqrt(var), normal))
         elif self.sample_scheme == 'gauss_full':
-            raise NotImplementedError
+            tot_dim = curr_output.get_shape()[-1].value
+            pred_dim = int((-3 + np.sqrt(9 + 8 * tot_dim)) / 2)
+            assert(pred_dim+pred_dim * (pred_dim + 1) / 2 == tot_dim)
+            mean, R = tf.split(curr_output, [int(pred_dim), int(pred_dim * (pred_dim + 1) / 2)],
+                               axis=1)  # Sigma_inv = RR^T Cholasky decomp, Sigma = R^(-T)R^(-1)
+            R_trans = tf.transpose(fill_lower_triangular(tf.nn.softplus(R) + eps),[0, 2, 1])
+
+            normal_shape = [s.value for s in mean.shape]
+            normal_shape.append(1)
+            normal = tf.random_normal(normal_shape, 0, 1,
+                                   dtype=tf.float32)
+            return tf.add(mean, tf.reshape(tf.matrix_triangular_solve(R_trans, normal), mean.shape)) #R^-T*normal has Sigma R^(-T)R^(-1)
+
         else:
             raise Exception('unknown sampling scheme')
 
