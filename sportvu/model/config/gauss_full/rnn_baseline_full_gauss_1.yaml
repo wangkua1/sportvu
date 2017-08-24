@@ -1,7 +1,7 @@
-node1: &batch_size 64
+node1: &batch_size 32
 node2: &rnn_hid 64
 
-class_name: Velocity
+class_name: Probabilistic
 ### Dataset Configuration
 model_config:
     dec_rnn_hid_dim: *rnn_hid

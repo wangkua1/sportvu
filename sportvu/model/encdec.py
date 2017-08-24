@@ -41,6 +41,8 @@ class EncDec(object):
             self.decoder_input_keep_prob = config['decoder_input_keep_prob']
         else:
             self.decoder_input_keep_prob = None
+        self.output_format = config['output_format']
+        self.tf_start_frame = tf.placeholder(tf.float32, [self.batch_size, self.dec_input_dim])
 
     def build(self):
         # placeholders
@@ -221,13 +223,29 @@ class EncDec(object):
 
     def output(self):
         return self.outputs
-    def aux_feed_dict(self, aux, feed_dict):
-        pass
 
-class Propobilistic(EncDec):
+    def sample(self):
+        return self.sampled_outputs
+
+    def aux_feed_dict(self, aux, feed_dict):
+        feed_dict[self.tf_start_frame] = aux['start_frame']
+
+    def sample_trajectory(self):
+        if self.output_format == 'location':
+            return self.sample()
+        elif self.output_format == 'veloctiy':
+            vels = self.sample() # (N, T, D)
+            traj = [self.tf_start_frame]
+            for time_idx in xrange(self.decoder_time_size):
+                traj.append(vels[:,time_idx] +traj[-1])
+            return tf.transpose(traj[1:], [1,0,2])
+        else:
+            raise('specify output_format in model config')
+
+class Probabilistic(EncDec):
     """docstring for Location"""
     def __init__(self, arg):
-        super(Propobilistic, self).__init__(arg)
+        super(Probabilistic, self).__init__(arg)
         if 'sample' in arg and arg['sample'] is not None:
             self.do_sample = True
             self.sample_scheme = arg['sample'] # right now just 'gauss_diag','gauss_full', 'gauss_mean'
@@ -267,31 +285,8 @@ class Propobilistic(EncDec):
         else:
             raise Exception('unknown sampling scheme')
 
-    def sample(self): 
-        return self.sampled_outputs
 
-class Location(Propobilistic):
-    """docstring for Location"""
-    def __init__(self, arg):
-        super(self.__class__, self).__init__(arg)
-    def sample_trajectory(self):
-        return self.sample()
 
-class Velocity(Propobilistic):
-    """docstring for Velocity"""
-    def __init__(self, arg):
-        super(self.__class__, self).__init__(arg)
-        self.tf_start_frame = tf.placeholder(tf.float32, [self.batch_size, self.dec_input_dim])
-
-    def aux_feed_dict(self, aux, feed_dict):
-        feed_dict[self.tf_start_frame] = aux['start_frame']
-
-    def sample_trajectory(self):
-        vels = self.sample() # (N, T, D)
-        traj = [self.tf_start_frame]
-        for time_idx in xrange(self.decoder_time_size):
-            traj.append(vels[:,time_idx] +traj[-1])
-        return tf.transpose(traj[1:], [1,0,2])
 
 if __name__ == '__main__':
 
