@@ -4,7 +4,7 @@ from utils import *
 
 
 class RunWindowP:
-    """	
+    """
     Given p(pnr) vs gameclock, give the start-time/end-time for PNR candidates
     type:
     	'fixed': slide window through, once a PNR detected, that window is set to zero
@@ -16,6 +16,7 @@ class RunWindowP:
 
     def detect(self, p, gameclock, return_modified_p=False):
         cand = []  # [(start_t, end_t)...]
+        indices_proposal_centers = []
         if self.config['type'] == 'fixed':
             for i in xrange(self.config['window_radius'],
                             len(p) - self.config['window_radius']):
@@ -25,8 +26,9 @@ class RunWindowP:
                         > self.config['count_threshold']):
                     cand.append((gameclock[i - self.config['window_radius']],
                                  gameclock[i + self.config['window_radius']]))
-                    curr_window_p *= 0 
+                    indices_proposal_centers.extend(gameclock[i + self.config['window_radius']/2])  # local maxima
+                    curr_window_p *= 0
         if not return_modified_p:
             return cand
         else:
-            return cand, None
+            return cand, None, indices_proposal_centers

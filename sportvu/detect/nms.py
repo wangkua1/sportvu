@@ -4,7 +4,7 @@ from utils import smooth_1D_array
 
 
 class NMS:
-    """ 
+    """
     Non-Maximum Suppression
     """
 
@@ -12,7 +12,7 @@ class NMS:
         self.config = config['detect_config']
 
     def detect(self, p, gameclock, return_modified_p=False):
-        nms_p = smooth_1D_array(p, self.config['window_radius'], func=np.max)
+        nms_p = smooth_1D_array(p, self.config['instance_radius'], func=np.max)
         nms_p[nms_p < self.config['prob_threshold']] = -0.01
         indices_proposal_centers = np.nonzero(nms_p == p)[0]  # local maxima
         cands = [(gameclock[np.max((0, i - self.config['window_radius']))],

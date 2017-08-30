@@ -34,10 +34,13 @@ import pandas as pd
 from sportvu.model.convnet2d import ConvNet2d
 from sportvu.model.convnet3d import ConvNet3d
 from sportvu.data import constant
+from sportvu.detect.running_window_p import RunWindowP
 from sportvu.detect.nms import NMS
 from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import BaseExtractor
 from sportvu.data.loader import PreprocessedLoader, EventLoader, SequenceLoader, BaseLoader
+from sportvu.data import *
+
 import config as CONFIG
 game_dir = constant.game_dir
 pnr_dir = os.path.join(game_dir, 'pnr-annotations')
@@ -101,7 +104,7 @@ def make_raw(data_config, model_config, exp_name, fold_index, every_K_frame, plo
     cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=net.output()))
     global_step = tf.Variable(0)
     train_step = optimize_loss(cross_entropy, global_step, learning_rate,
-                optimizer=lambda lr: tf.train.MomentumOptimizer(lr, .9))
+                optimizer=lambda lr: tf.train.AdamOptimizer(lr, .9))
     correct_prediction = tf.equal(tf.argmax(net.output(), 1), tf.argmax(y_, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
@@ -117,10 +120,13 @@ def make_raw(data_config, model_config, exp_name, fold_index, every_K_frame, plo
     print ('Best Validation CE: %f, Acc: %f' % (ce, val_accuracy))
 
     # test section, change to games that have not been trained on
-    data_config['data_config']['game_ids'] = data_config['data_config']['game_ids_no_train']
+    data_config['data_config']['game_ids'] = data_config['data_config']['detect_validation']
     dataset = BaseDataset(data_config, int(arguments['<fold_index>']), load_raw=True, no_anno=True)
     extractor = BaseExtractor(data_config)
     loader = BaseLoader(dataset, extractor, data_config['batch_size'], fraction_positive=0.5)
+    annotations = annotation.prepare_gt_file_from_raw_label_dir(pnr_dir, game_dir)
+    annotations = pd.DataFrame(annotations)
+    annotations = annotations.loc[annotations.gameid.isin(data_config['data_config']['detect_validation']),:]
 
     ind = 0
     for game_id in dataset.game_ids:
@@ -130,13 +136,14 @@ def make_raw(data_config, model_config, exp_name, fold_index, every_K_frame, plo
             if event.empty:
                 continue
 
-            print('Game: %s, Event: %i' % (game_id, event_id))
+            print('Game: %s, Index: %i' % (game_id, event_id))
             loaded = loader.load_event(game_id=game_id, event_id=event_id, every_K_frame=every_K_frame)
+            labels = annotations.loc[annotations.eid == event_id, 'gameclock'].values
             if loaded is not None:
                 if loaded == 0:
                     ind+=1
                     continue
-                batch_xs, gameclocks, labels = loaded
+                batch_xs, gameclocks, _ = loaded
                 meta = [event_id, game_id]
 
             else:
@@ -187,6 +194,7 @@ def detect_from_prob(data_config, model_config, detect_config, exp_name, fold_in
     Returns
     -------
     """
+    data_config['data_config']['game_ids'] = data_config['data_config']['detect_validation']
     dataset = BaseDataset(data_config, int(arguments['<fold_index>']), load_raw=True, no_anno=True)
     detector = eval(detect_config['class'])(detect_config)
     all_pred_f = filter(lambda s:'raw-' in s and 'raw-meta' not in s,os.listdir('%s/pkl'%(plot_folder)))
@@ -205,11 +213,18 @@ def detect_from_prob(data_config, model_config, detect_config, exp_name, fold_in
         for ind, cand in enumerate(cands):
             cand_x = np.arange(cand[1], cand[0], .1)
             plt.plot(cand_x, np.ones((len(cand_x))) * .95, '-' )
-            ## if FP, record annotations
-            if not label_in_cand(cand, labels):
-                anno = {'gameid':meta[1], 'gameclock':gameclocks[frame_indices[ind]],
-                        'eid':meta[0], 'quarter':dataset.games[meta[1]]['events'][meta[0]]['quarter']}
-                annotations.append(anno)
+            # # if TP, record annotations
+            # if label_in_cand(cand, labels):
+            #     anno = {'gameid':meta[1], 'gameclock':gameclocks[frame_indices[ind]],
+            #             'eid':meta[0], 'quarter':dataset.games[meta[1]]['events'][meta[0]]['quarter']}
+            #     annotations.append(anno)
+            anno = {
+                'gameid': meta[1],
+                'gameclock': gameclocks[frame_indices[ind]],
+                'eid':meta[0],
+                'quarter':dataset.games[meta[1]]['events'][meta[0]]['quarter']
+            }
+            annotations.append(anno)
 
         plt.ylim([0,1])
         plt.title('Game: %s, Event: %i'%(meta[1], meta[0]))
@@ -220,9 +235,11 @@ def detect_from_prob(data_config, model_config, detect_config, exp_name, fold_in
     annotations = pd.DataFrame(annotations)
     game_ids = annotations.loc[:,'gameid'].drop_duplicates(inplace=False).values
     for game_id in game_ids:
+        print('Detecting game: %s' % (game_id))
         annotations_game = annotations.loc[annotations.gameid == game_id,:]
-        annotations_game = annotations_game.sort(['eid'], ascending=[1])
-        annotations_game.to_csv('%s/detect-%s.csv' % (pnr_dir, game_id), index=False)
+        annotations_game = annotations_game.sort(['eid','gameclock'], ascending=[1,0])
+        annotations_game = annotations_game.drop('gameid', axis=1, inplace=False)
+        annotations_game.to_csv('%s/format/detect-%s-%s.csv' % (pnr_dir, game_id, detect_config['class']), index=False)
 
 
 

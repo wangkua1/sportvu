@@ -1,5 +1,6 @@
 import pandas as pd
 import math
+import os
 import cPickle as pickle
 
 def read_annotation(fpath):
@@ -25,17 +26,20 @@ def read_annotation(fpath):
 def read_annotation_from_raw(fpath, game_id):
     data = pickle.load(open(fpath, 'rb'))
     annotations = {}
-    for ind, row in enumerate(data):
-        anno = []
-        if row['gameid'] == str(game_id):
-            anno.append(row['gameclock'])
-        annotations[row['eid']] = anno
+    data = pd.DataFrame(data)
+    event_ids = data.loc[:,'eid'].drop_duplicates(inplace=False).values
+
+    for event in event_ids:
+        eid_annotations = data.loc[data.eid == event, 'gameclock'].values
+        annotations[event] = eid_annotations
+
     return annotations
 
-def prepare_gt_file_from_raw_label_dir(pnr_dir):
+def prepare_gt_file_from_raw_label_dir(pnr_dir, game_dir):
     gt = []
-    for pnr_anno_ind in xrange(len(os.listdir(pnr_dir))):
-        game_anno_base = os.listdir(pnr_dir)[pnr_anno_ind]
+    all_raw_f = filter(lambda s:'raw-' in s,os.listdir(pnr_dir))
+    for pnr_anno_ind in xrange(len(all_raw_f)):
+        game_anno_base = all_raw_f[pnr_anno_ind]
         if not os.path.isfile(os.path.join(pnr_dir,game_anno_base)):
             continue
         game_id = game_anno_base.split('.')[0].split('-')[1]
@@ -55,14 +59,13 @@ def prepare_gt_file_from_raw_label_dir(pnr_dir):
 
 
 def script_anno_rev0():
-    gt = prepare_gt_file_from_raw_label_dir(pnr_dir)
+    gt = prepare_gt_file_from_raw_label_dir(pnr_dir, game_dir)
     pickle.dump(gt, open(os.path.join(pnr_dir,'gt/rev0.pkl'),'wb'))
 
 if __name__ == '__main__':
     from sportvu import data
     from sportvu.vis.Game import Game
     from sportvu.vis.Event import Event
-    import os
     game_dir = data.constant.game_dir
     pnr_dir = os.path.join(data.constant.data_dir, 'data/pnr-annotations')
     script_anno_rev0()

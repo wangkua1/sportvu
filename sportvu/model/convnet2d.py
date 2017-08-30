@@ -1,7 +1,15 @@
 from __future__ import division
 import tensorflow as tf
 import numpy as np
-from utils import * 
+from utils import *
+
+# play with were batch norm is (2 conv layers before batch norm - no first layer bn)
+# play with kernel size of conv layers (3x3 kernel instead of 5x5)
+# player with size of conv dims(larger) and dims of fc layers(smaller)
+# play with linearities
+# play with optimization functions
+
+# build lstm model
 
 class ConvNet2d:
     """
@@ -15,10 +23,12 @@ class ConvNet2d:
         self.conv_layers = config['conv_layers']
         self.fc_layers = config['fc_layers']
         self.value_keep_prob = config['keep_prob']
+        self.activation = config['activation']
         if 'bn' in config:## later version
             self.bn = config['bn']
             if self.bn:
                 self.training = tf.placeholder(tf.bool)
+                self.bn_inds = config['bn_inds']
         else:
             self.bn = False
         if 'pool' in config:## later version
@@ -60,21 +70,33 @@ class ConvNet2d:
         # conv
         h_pool_drop = x
         for layer_ind in xrange(len(self.conv_layers)):
-            h_conv = tf.nn.relu(
-                conv2d(h_pool_drop, W_conv[layer_ind]) + b_conv[layer_ind])
+            if self.activation == 'ReLU':
+                h_conv = tf.nn.relu(
+                    conv2d(h_pool_drop, W_conv[layer_ind]) + b_conv[layer_ind]
+                )
+            else:
+                h_conv = leaky_ReLU(
+                    conv2d(h_pool_drop, W_conv[layer_ind]) + b_conv[layer_ind]
+                )
             if self.pool:
                 h_pool = max_pool_2x2(h_conv)
             else:
                 h_pool = h_conv
-            if self.bn:
+            if self.bn and layer_ind in self.bn_inds:
                 h_pool = bn(h_pool, self.training)
             h_pool_drop = tf.nn.dropout(h_pool, keep_prob)
         # fc
         h_pool_flat = tf.reshape(h_pool_drop, [-1, SHAPE_convlast])
         h_fc_drop = h_pool_flat
         for layer_ind in xrange(len(self.fc_layers) - 2):
-            h_fc = tf.nn.relu(tf.matmul(h_fc_drop, W_fc[
-                              layer_ind]) + b_fc[layer_ind])
+            if self.activation == 'ReLU':
+                h_fc = tf.nn.relu(
+                    tf.matmul(h_fc_drop, W_fc[layer_ind]) + b_fc[layer_ind]
+                )
+            else:
+                h_fc = leaky_ReLU(
+                    tf.matmul(h_fc_drop, W_fc[layer_ind]) + b_fc[layer_ind]
+                )
             if self.bn:
                 h_fc = bn(h_fc, self.training)
             h_fc_drop = tf.nn.dropout(h_fc, keep_prob)
@@ -119,7 +141,7 @@ if __name__ == '__main__':
     y_ = tf.placeholder(tf.float32, [None, 2])
     cross_entropy = tf.reduce_mean(
         tf.nn.softmax_cross_entropy_with_logits(labels=y_,logits=net.output()))
-    train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
+    train_step = tf.train.AdagradOptimizer(1e-4).minimize(cross_entropy)
     correct_prediction = tf.equal(tf.argmax(net.output(), 1), tf.argmax(y_, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 

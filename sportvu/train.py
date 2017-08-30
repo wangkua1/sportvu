@@ -24,11 +24,11 @@ import tensorflow as tf
 optimize_loss = tf.contrib.layers.optimize_loss
 import sys
 import os
-if os.environ['HOME'] == '/u/wangkua1':  # jackson guppy
-    sys.path.append('/u/wangkua1/toolboxes/resnet')
-else:
-    sys.path.append('/ais/gobi4/slwang/sports/sportvu/resnet')
-    sys.path.append('/ais/gobi4/slwang/sports/sportvu')
+# if os.environ['HOME'] == '/u/wangkua1':  # jackson guppy
+#     sys.path.append('/u/wangkua1/toolboxes/resnet')
+# else:
+#     sys.path.append('/ais/gobi4/slwang/sports/sportvu/resnet')
+#     sys.path.append('/ais/gobi4/slwang/sports/sportvu')
 from sportvu.model.convnet2d import ConvNet2d
 from sportvu.model.convnet3d import ConvNet3d
 # data
@@ -54,13 +54,18 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     extractor = BaseExtractor(data_config)
     if 'negative_fraction_hard' in data_config:
         nfh = data_config['negative_fraction_hard']
+        pfh = 1 - nfh
     else:
         nfh = 0
-    if ('version' in data_config['extractor_config']
-            and data_config['extractor_config']['version'] >= 2):
-        loader = SequenceLoader(dataset, extractor, data_config[
-                                'batch_size'], fraction_positive=0.5,
-                                negative_fraction_hard=nfh)
+        pfh = 0.5
+    if 'version' in data_config['extractor_config'] and data_config['extractor_config']['version'] >= 2:
+        loader = SequenceLoader(
+            dataset,
+            extractor,
+            data_config['batch_size'],
+            fraction_positive=pfh,
+            negative_fraction_hard=nfh
+        )
     elif 'no_extract' in data_config and data_config['no_extract']:
         loader = EventLoader(dataset, extractor, None, fraction_positive=0.5)
     else:
@@ -87,17 +92,39 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
 
     # build loss
     y_ = tf.placeholder(tf.float32, [None, 2])
-    learning_rate = tf.placeholder(tf.float32, [])
+    weights = tf.trainable_variables()
+    l2_loss = tf.add_n([tf.nn.l2_loss(w) for w in weights]) * 0.001
     cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=net.output()))
+    loss = tf.reduce_mean(cross_entropy + l2_loss)
+
+    # optimize
     # train_step = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
     global_step = tf.Variable(0)
+    learning_rate = tf.placeholder(tf.float32, [])
+    # learning_rate = tf.train.exponential_decay(init_lr, global_step, 10000, 0.96, staircase=True)
     # train_step = optimize_loss(cross_entropy, global_step, learning_rate,
     #             optimizer=lambda lr: tf.train.AdamOptimizer(lr))
-    train_step = optimize_loss(cross_entropy, global_step, learning_rate,
-                optimizer=lambda lr: tf.train.MomentumOptimizer(lr, .9))
+    # train_step = optimize_loss(cross_entropy, global_step, learning_rate,
+    #             optimizer=lambda lr: tf.train.MomentumOptimizer(lr, .9))
+    # train_step = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(cross_entropy, global_step=global_step)
+    train_step = optimize_loss(loss, global_step, learning_rate, optimizer=lambda lr: tf.train.AdamOptimizer(lr, .9))
+
+    # reporting
     correct_prediction = tf.equal(tf.argmax(net.output(), 1), tf.argmax(y_, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    predictions = tf.argmax(net.output(), 1)
+    true_labels = tf.argmax(y_, 1)
+    confusion_matrix = tf.confusion_matrix(labels=true_labels, predictions=predictions, num_classes=2)
 
+    tp = tf.count_nonzero(predictions * true_labels)
+    tn = tf.count_nonzero((predictions - 1) * (true_labels - 1))
+    fp = tf.count_nonzero(predictions * (true_labels - 1))
+    fn = tf.count_nonzero((predictions - 1) * true_labels)
+
+    accuracy = (tp + tn) / (tp + fp + fn + tn)
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+    fmeasure = (2 * precision * recall) / (precision + recall)
 
     # testing
     if testing:
@@ -118,7 +145,6 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
         print ('Best Validation CE: %f, Acc: %f' % (ce, val_accuracy))
 
         # test section
-
         dataset = BaseDataset(f_data_config, int(arguments['<fold_index>']), load_raw=True)
         extractor = BaseExtractor(f_data_config)
         loader = BaseLoader(dataset, extractor, data_config['batch_size'], fraction_positive=0.5)
@@ -154,11 +180,8 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             # save the raw predictions
             probs = probs[:, 1]
             pkl.dump([gameclocks, probs, labels], open('%s/pkl/%s-%i.pkl'%(plot_folder,split, ind), 'w'))
-
-            if arguments['--train']:
-                pkl.dump(meta, open('%s/pkl/%s-meta-%i.pkl'%(plot_folder,split, ind), 'w'))
+            pkl.dump(meta, open('%s/pkl/%s-meta-%i.pkl'%(plot_folder,split, ind), 'w'))
             ind += 1
-
 
         sys.exit(0)
 
@@ -168,16 +191,23 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     # tensorboard
     if not os.path.exists(CONFIG.logs.dir):
         os.mkdir(CONFIG.logs.dir)
+
     tf.summary.scalar('cross_entropy', cross_entropy)
+    tf.summary.scalar('loss', loss)
     tf.summary.scalar('accuray', accuracy)
+    tf.summary.scalar('Accuracy', accuracy)
+    tf.summary.scalar('Precision', precision)
+    tf.summary.scalar('Recall', recall)
+    tf.summary.scalar('F-Score', fmeasure)
+    tf.summary.histogram('label_distribution', y_)
+    tf.summary.histogram('logits', net.logits)
+
     if model_config['class_name'] == 'ConvNet2d':
         tf.summary.image('input', net.x, max_outputs=4)
     elif model_config['class_name'] == 'ConvNet3d':
         tf.summary.image('input', tf.reduce_sum(net.x, 1), max_outputs=4)
     else:
         raise Exception('input format not specified')
-    tf.summary.histogram('label_distribution', y_)
-    tf.summary.histogram('logits', net.logits)
 
     merged = tf.summary.merge_all()
     log_folder = '%s/%s' % (CONFIG.logs.dir,exp_name)
@@ -216,7 +246,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             raise Exception('input format not specified')
         feed_dict = net.input(batch_xs, None, True)
         feed_dict[y_] = batch_ys
-        if iter_ind ==max_iter//2:
+        if iter_ind % 3000 == 0 and iter_ind > 0:
             lrv *= .1
         feed_dict[learning_rate] = lrv
         summary, _ = sess.run([merged, train_step], feed_dict=feed_dict)
@@ -225,14 +255,19 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             feed_dict = net.input(batch_xs, 1, False)
             feed_dict[y_] = batch_ys
             train_accuracy = accuracy.eval(feed_dict=feed_dict)
+            train_ce = cross_entropy.eval(feed_dict=feed_dict)
+            train_confusion_matrix = confusion_matrix.eval(feed_dict=feed_dict)
+
             # validate trained model
             feed_dict = net.input(val_x, 1, False)
             feed_dict[y_] = val_t
             summary, val_ce, val_accuracy = sess.run(
                 [merged, cross_entropy, accuracy], feed_dict=feed_dict)
             val_writer.add_summary(summary, iter_ind)
-            print("step %d, training accuracy %g, validation accuracy %g, val ce %g" %
-                  (iter_ind, train_accuracy, val_accuracy, val_ce))
+            print("step %d, training accuracy %g, validation accuracy %g, train ce %g,  val ce %g" %
+                  (iter_ind, train_accuracy, val_accuracy, train_ce, val_ce))
+            # print('Train Confusion Matrix: \n %s' % (str(train_confusion_matrix)))
+
             if val_ce < best_val_ce:
                 best_not_updated = 0
                 p = '%s/%s.ckpt.best' % (CONFIG.saves.dir, exp_name)
@@ -263,7 +298,7 @@ if __name__ == '__main__':
     exp_name = '%s-X-%s' % (model_name, data_name)
     fold_index = int(arguments['<fold_index>'])
     init_lr = 1e-3
-    max_iter = 10000
-    best_acc_delay = 3000
+    max_iter = 30000
+    best_acc_delay = 10000
     testing = arguments['--test']
     train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, testing)

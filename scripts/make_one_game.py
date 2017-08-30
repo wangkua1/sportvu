@@ -2,6 +2,7 @@
 
 Usage:
     make_one_game.py --list <index> <dir-prefix>
+    make_one_game.py --gameid <gameid> <index> <dir-prefix>
     make_one_game.py [--annotate] [--list] <index> <dir-prefix> <pnr-prefix> <time-frame-radius>
     make_one_game.py --annotate [--list] [--gameid] <gameid> <dir-prefix> <pnr-prefix> <time-frame-radius>
     make_one_game.py --annotate --gameid <gameid> <index> <dir-prefix> <pnr-prefix> <time-frame-radius>
@@ -20,7 +21,7 @@ Options:
     --from_raw: use raw predictions to plot animation of pnr
 
 Example:
-    python make_one_game.py --from_raw --game_id 0021500188 1 viz raw 25 from-raw-examples.pkl
+    python make_one_game.py --from_raw --gameid 0021500408 1 viz raw 75 from-raw-examples.pkl
 """
 
 from sportvu import data
@@ -114,6 +115,7 @@ def render_one_game(raw_data, directory, skip_these):
                 e.truncate_by_following_event(raw_data['events'][i + 1])
             ## render
             try:
+                print('Creating video for event: %i' % (i))
                 e.show(os.path.join(directory, '%i.mp4' % i))
             except EventException as e:
                 print ('malformed sequence, skipping')

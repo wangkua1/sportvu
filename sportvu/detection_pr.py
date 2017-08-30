@@ -9,6 +9,7 @@ Arguments:
     <percent_grid> e.g. 5, prob_threshold = 0,5,10,15 ...
 Example:
     python detection_pr.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml nms1.yaml 5 --single
+    python detection_pr.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml window-5-thresh-80-fixed.yaml 5 --single
 """
 
 from __future__ import absolute_import
@@ -60,6 +61,7 @@ else:
     split = 'val'
 all_pred_f = filter(lambda s:'.pkl' in s and split in s
                     and 'meta' not in s,os.listdir('%s/pkl' % (plot_folder)))
+# all_pred_f = filter(lambda s:'raw-' in s and 'raw-meta' not in s,os.listdir('%s/pkl'%(plot_folder)))
 
 
 def PR(all_pred_f, detector):
@@ -91,9 +93,10 @@ if detect_config['class'] == 'RunWindowP':
     outer_grid = xrange(1, detector.config['window_radius'] * 2, 2)
     k = 'count_threshold'
 elif detect_config['class'] == 'NMS':
-    outer_grid = xrange(1, detector.config['window_radius'])
-    k = 'window_radius'
+    outer_grid = xrange(1, detector.config['instance_radius'], 2)
+    k = 'instance_radius'
 if arguments['--single']:
+    out_type = 'single'
     ps = []
     rs = []
     for prob_threshold in tqdm(xrange(0, 100, int(arguments['<percent_grid>']))):
@@ -110,6 +113,7 @@ if arguments['--single']:
     plt.ylabel('precision/recall')
 
 else:
+    out_type = 'many'
     for v in outer_grid:
         detector.config[k] = v
         ps = []
@@ -132,5 +136,5 @@ ax = fig.gca()
 ax.set_xticks(np.arange(0, 1, 0.1))
 ax.set_yticks(np.arange(0, 1., 0.1))
 plt.grid()
-plt.savefig('%s/%s-precision-recall.png'%(CONFIG.plots.dir,detect_config['class']))
+plt.savefig('%s/%s-precision-recall-%s.png'%(CONFIG.plots.dir,detect_config['class'], out_type))
 plt.clf()
