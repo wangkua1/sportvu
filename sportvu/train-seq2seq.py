@@ -1,7 +1,8 @@
 """train-seq2seq.py
 
 Usage:
-    train-seq2seq.py <fold_index> <f_data_config> <f_model_config> <loss> [--prefix <p>]
+
+    train-seq2seq.py <fold_index> <f_data_config> <f_model_config> <loss> [-s <f_scheduler_config>]
     train-seq2seq.py --test <fold_index> <f_data_config> <f_model_config>
 
 Arguments:
@@ -26,11 +27,16 @@ import sys
 import os
 if os.environ['HOME'] == '/u/wangkua1':  # jackson guppy
     sys.path.append('/u/wangkua1/toolboxes/resnet')
+elif os.environ['HOME'] =='/u/ethanf':
+    sys.path.append('/ais/gobi5/ethanf/projects/sportvu/sportvu/resnet')
+    sys.path.append('/ais/gobi5/ethanf/projects/sportvu/sportvu')
+    sys.path.append('/ais/gobi5/ethanf/projects/sportvu/')
+    print(sys.path)
 else:
     sys.path.append('/ais/gobi4/slwang/sports/sportvu/resnet')
     sys.path.append('/ais/gobi4/slwang/sports/sportvu')
 from sportvu.model.seq2seq import Seq2Seq
-from sportvu.model.encdec import EncDec, Velocity, Location
+from sportvu.model.encdec import EncDec, Probabilistic
 # data
 from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import Seq2SeqExtractor, EncDecExtractor
@@ -50,8 +56,9 @@ import cPickle as pkl
 # import matplotlib.pylab as plt
 # plt.ioff()
 # fig = plt.figure()
-
-def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, loss_class, testing=False):
+# scheduler
+from sportvu.scheduler import Scheduler
+def train(data_config, model_config, scheduler_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, loss_class, testing=False):
     # Initialize dataset/loader
     dataset = BaseDataset(data_config, fold_index, load_raw=False)
     extractor = eval(data_config['extractor_class'])(data_config)
@@ -73,6 +80,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
         net = eval(model_config['class_name'])(model_config['model_config'])
         net.build()
         main_model_variables = [v for v in tf.all_variables() if v.name.startswith(vs.name)]
+
 
     # build loss
     y_ = tf.placeholder(tf.float32,
@@ -153,10 +161,11 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     best_val_teacher_forced_loss = np.inf
     best_val_real_loss = np.inf
     best_not_updated = 0
-    lrv = init_lr
-    tfs = model_config['model_config']['decoder_time_size']
     train_loss = []
+    scheduler = Scheduler(scheduler_config)
     for iter_ind in tqdm(range(max_iter)):
+        scheduler.update_iteration(iter_ind)
+
         best_not_updated += 1
         loaded = cloader.next()
         if loaded is not None:
@@ -164,15 +173,13 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
         else:
             cloader.reset()
             continue
-        if iter_ind>0 and iter_ind % 5000 == 0:
-            tfs -= 5
+        tfs = scheduler.get('tfs')
         feed_dict = net.input(dec_input, 
                                 teacher_forcing_stop=np.max([1, tfs]),
                                 enc_input=enc_input
                                 )
         feed_dict[y_] = dec_output
-        if iter_ind ==2000:
-            lrv *= .1
+        lrv = scheduler.get('lrv')
         feed_dict[learning_rate] = lrv
         summary, tl = sess.run([merged, train_step], feed_dict=feed_dict)
         # print (tl)
@@ -221,12 +228,12 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 else:
                     start_frame = history[:,:,-1].reshape(history.shape[0],-1)
 
-                gt_future = experpolate_position(start_frame, dec_output)
-                pred_future = experpolate_position(start_frame, pred)
 
-                # imgs = make_sequence_prediction_image(history, gt_future, pred_future, pid)
-                pkl.dump((history, gt_future, pred_future, pid),
-                          open(os.path.join("./logs/"+exp_name, 'iter-%g.pkl'%(iter_ind)),'wb'))
+                # pred_future = experpolate_position(start_frame, pred)
+                #
+                # # imgs = make_sequence_prediction_image(history, gt_future, pred_future, pid)
+                # pkl.dump((history, gt_future, pred_future, pid),
+                #           open(os.path.join("./logs/"+exp_name, 'iter-%g.pkl'%(iter_ind)),'wb'))
 
                 # for i in xrange(5):
                 #     plt.imshow(imgs[i])
@@ -236,10 +243,11 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 ## TODO: always monitor loss using trajectory
                 net.aux_feed_dict({'start_frame':start_frame}, feed_dict)
                 traj = sess.run(net.sample_trajectory(), feed_dict = feed_dict)
-                if model_config['class_name'] == 'Location': ### scale 
+                if net.output_format == 'location': ### scale
                     traj = wrapper_concatenated_last_dim(scale_last_dim, traj, upscale=True)
                     gt_traj = wrapper_concatenated_last_dim(scale_last_dim, dec_output, upscale=True)
-                elif model_config['class_name'] == 'Velocity':
+                elif net.output_format == 'velocity':
+                    gt_future = experpolate_position(start_frame, dec_output)
                     gt_traj = gt_future[:,1:]
                 else:
                     raise NotImplementedError
@@ -277,9 +285,14 @@ if __name__ == '__main__':
     print ("............\n")
     f_data_config = arguments['<f_data_config>']
     f_model_config = arguments['<f_model_config>']
-
+    if arguments['-s']:
+        f_scheduler_config = arguments['<f_scheduler_config>']
+    else:
+        print ("Using default scheduler config")
+        f_scheduler_config = 'scheduler/config/example.yaml'
     data_config = yaml.load(open(f_data_config, 'rb'))
     model_config = yaml.load(open(f_model_config, 'rb'))
+    scheduler_config = yaml.load(open(f_scheduler_config, 'rb'))
     model_name = os.path.basename(f_model_config).split('.')[0]
     data_name = os.path.basename(f_data_config).split('.')[0]
     exp_name = '%s-X-%s-X-%s' % (model_name, data_name,arguments['<loss>'])
@@ -290,5 +303,5 @@ if __name__ == '__main__':
     max_iter = 100000
     best_acc_delay = 3000
     testing = arguments['--test']
-    train(data_config, model_config, exp_name, fold_index,
+    train(data_config, model_config, scheduler_config, exp_name, fold_index,
           init_lr, max_iter, best_acc_delay, eval(arguments['<loss>'])(),testing)

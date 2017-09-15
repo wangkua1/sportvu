@@ -1,5 +1,6 @@
 from __future__ import division
 import tensorflow as tf
+from tensorflow.python.ops.distributions.util import fill_lower_triangular
 import numpy as np
 from utils import * 
 
@@ -40,6 +41,8 @@ class EncDec(object):
             self.decoder_input_keep_prob = config['decoder_input_keep_prob']
         else:
             self.decoder_input_keep_prob = None
+        self.output_format = config['output_format']
+        self.tf_start_frame = tf.placeholder(tf.float32, [self.batch_size, self.dec_input_dim])
 
     def build(self):
         # placeholders
@@ -220,61 +223,70 @@ class EncDec(object):
 
     def output(self):
         return self.outputs
-    def aux_feed_dict(self, aux, feed_dict):
-        pass
 
-class Propobilistic(EncDec):
-    """docstring for Location"""
-    def __init__(self, arg):
-        super(Propobilistic, self).__init__(arg)
-        if 'sample' in arg and arg['sample'] is not None:
-            self.is_sample = True
-            self.sample_scheme = arg['sample'] # right now just 'gauss_diag','gauss_full', 'gauss_mean'
-        else:
-            self.is_sample = False
-
-    def sample_timestep(self, curr_output):
-        """
-        curr_output is a tf variable holding the network output at the current time step
-        sample_timestep() should return a sample in the same shape as decoder_input (self.dec_input_dim])
-        """
-        if not self.is_sample: ## deterministic
-            return curr_output
-
-        if self.sample_scheme == 'gauss_mean':
-            return curr_output[..., :self.dec_input_dim]
-        elif self.sample_scheme == 'gauss_diag':
-            raise NotImplementedError
-        elif self.sample_scheme == 'gauss_full':
-            raise NotImplementedError
-        else:
-            raise Exception('unknown sampling scheme')
-
-    def sample(self): 
+    def sample(self):
         return self.sampled_outputs
-
-class Location(Propobilistic):
-    """docstring for Location"""
-    def __init__(self, arg):
-        super(self.__class__, self).__init__(arg)
-    def sample_trajectory(self):
-        return self.sample()
-
-class Velocity(Propobilistic):
-    """docstring for Velocity"""
-    def __init__(self, arg):
-        super(self.__class__, self).__init__(arg)
-        self.tf_start_frame = tf.placeholder(tf.float32, [self.batch_size, self.dec_input_dim])
 
     def aux_feed_dict(self, aux, feed_dict):
         feed_dict[self.tf_start_frame] = aux['start_frame']
 
     def sample_trajectory(self):
-        vels = self.sample() # (N, T, D)
-        traj = [self.tf_start_frame]
-        for time_idx in xrange(self.decoder_time_size):
-            traj.append(vels[:,time_idx] +traj[-1])
-        return tf.transpose(traj[1:], [1,0,2])
+        if self.output_format == 'location':
+            return self.sample()
+        elif self.output_format == 'veloctiy':
+            vels = self.sample() # (N, T, D)
+            traj = [self.tf_start_frame]
+            for time_idx in xrange(self.decoder_time_size):
+                traj.append(vels[:,time_idx] +traj[-1])
+            return tf.transpose(traj[1:], [1,0,2])
+        else:
+            raise('specify output_format in model config')
+
+class Probabilistic(EncDec):
+    """docstring for Location"""
+    def __init__(self, arg):
+        super(Probabilistic, self).__init__(arg)
+        if 'sample' in arg and arg['sample'] is not None:
+            self.do_sample = True
+            self.sample_scheme = arg['sample'] # right now just 'gauss_diag','gauss_full', 'gauss_mean'
+        else:
+            self.do_sample = False
+
+    def sample_timestep(self, curr_output, eps=1e-5):
+        """
+        curr_output is a tf variable holding the network output at the current time step
+        sample_timestep() should return a sample in the same shape as decoder_input (self.dec_input_dim])
+        """
+        if not self.do_sample: ## deterministic
+            return curr_output
+
+        if self.sample_scheme == 'gauss_mean':
+            return curr_output[..., :self.dec_input_dim]
+        elif self.sample_scheme == 'gauss_diag':
+            mean, pre_var = tf.split(curr_output, 2, axis=1)
+            var = tf.nn.softplus(pre_var) + eps
+            normal = tf.random_normal(mean.shape, 0, 1,
+                                   dtype=tf.float32)
+            return tf.add(mean, tf.multiply(tf.sqrt(var), normal))
+        elif self.sample_scheme == 'gauss_full':
+            tot_dim = curr_output.get_shape()[-1].value
+            pred_dim = int((-3 + np.sqrt(9 + 8 * tot_dim)) / 2)
+            assert(pred_dim+pred_dim * (pred_dim + 1) / 2 == tot_dim)
+            mean, R = tf.split(curr_output, [int(pred_dim), int(pred_dim * (pred_dim + 1) / 2)],
+                               axis=1)  # Sigma_inv = RR^T Cholasky decomp, Sigma = R^(-T)R^(-1)
+            R_trans = tf.transpose(fill_lower_triangular(tf.nn.softplus(R) + eps),[0, 2, 1])
+
+            normal_shape = [s.value for s in mean.shape]
+            normal_shape.append(1)
+            normal = tf.random_normal(normal_shape, 0, 1,
+                                   dtype=tf.float32)
+            return tf.add(mean, tf.reshape(tf.matrix_triangular_solve(R_trans, normal), mean.shape)) #R^-T*normal has Sigma R^(-T)R^(-1)
+
+        else:
+            raise Exception('unknown sampling scheme')
+
+
+
 
 if __name__ == '__main__':
 

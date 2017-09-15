@@ -12,4 +12,4 @@ class DiagGaussNLL(object):
         """
         mean, pre_var = tf.split(pred, 2, axis=2) #doesn't work with axis=-1
         var = tf.nn.softplus(pre_var) + eps
-        return tf.reduce_mean(0.5 * tf.div(tf.pow(mean - y_, 2), var) - 0.5 * tf.log(var))  # +const
+        return tf.reduce_mean(0.5 * tf.div(tf.pow(mean - y_, 2), var) + 0.5 * tf.log(var))  # +const
