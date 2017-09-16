@@ -31,7 +31,7 @@ import cPickle as pkl
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from sportvu.model.convnet2d import ConvNet2d
+from sportvu.model.convnet2d import ConvNet2d, ConvNet2dDeep
 from sportvu.model.convnet3d import ConvNet3d
 from sportvu.data import constant
 from sportvu.detect.running_window_p import RunWindowP
@@ -90,7 +90,7 @@ def make_raw(data_config, model_config, exp_name, fold_index, every_K_frame, plo
     cloader = loader
 
     val_x, val_t = loader.load_valid()
-    if model_config['class_name'] == 'ConvNet2d':
+    if model_config['class_name'] == 'ConvNet2d' or model_config['class_name'] == 'ConvNet2dDeep':
         val_x = np.rollaxis(val_x, 1, 4)
     elif model_config['class_name'] == 'ConvNet3d':
         val_x = np.rollaxis(val_x, 1, 5)
@@ -149,7 +149,7 @@ def make_raw(data_config, model_config, exp_name, fold_index, every_K_frame, plo
             else:
                 print ('Bye')
                 sys.exit(0)
-            if model_config['class_name'] == 'ConvNet2d':
+            if model_config['class_name'] == 'ConvNet2d' or model_config['class_name'] == 'ConvNet2dDeep':
                 batch_xs = np.rollaxis(batch_xs, 1, 4)
             elif model_config['class_name'] == 'ConvNet3d':
                 batch_xs = np.rollaxis(batch_xs, 1, 5)

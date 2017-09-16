@@ -1,15 +1,16 @@
 """detection_pr.py
 plot precision-recall, varying prob_threshold
 Usage:
-    detection_pr.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> <percent_grid> --single --train
-    detection_pr.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> <percent_grid> --single
-    detection_pr.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> <percent_grid>
+    detection_pr.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> <grid_type> <percent_grid> --train
+    detection_pr.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> <grid_type> <percent_grid> --test
+    detection_pr.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> <grid_type> <percent_grid>
 
 Arguments:
     <percent_grid> e.g. 5, prob_threshold = 0,5,10,15 ...
 Example:
-    python detection_pr.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml nms1.yaml 5 --single
-    python detection_pr.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml window-5-thresh-80-fixed.yaml 5 --single
+    python detection_pr.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml nms1.yaml single 5
+    python detection_pr.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml window-5-thresh-80-fixed.yaml auc 5
+    python detection_pr.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml window-5-thresh-80-fixed.yaml many 5
 """
 
 from __future__ import absolute_import
@@ -24,6 +25,7 @@ import yaml
 import gc
 import matplotlib.pylab as plt
 import cPickle as pkl
+from sklearn import metrics
 ##
 from sportvu.detect.running_window_p import RunWindowP
 from sportvu.detect.nms import NMS
@@ -57,11 +59,15 @@ if not os.path.exists(plot_folder):
 plt.figure()
 if arguments['--train']:
     split = 'train'
-else:
+    all_pred_f = filter(lambda s: '.pkl' in s and split in s
+                                  and 'meta' not in s, os.listdir('%s/pkl' % (plot_folder)))
+elif arguments['--test']:
     split = 'val'
-all_pred_f = filter(lambda s:'.pkl' in s and split in s
-                    and 'meta' not in s,os.listdir('%s/pkl' % (plot_folder)))
-# all_pred_f = filter(lambda s:'raw-' in s and 'raw-meta' not in s,os.listdir('%s/pkl'%(plot_folder)))
+    all_pred_f = filter(lambda s: '.pkl' in s and split in s
+                                  and 'meta' not in s, os.listdir('%s/pkl' % (plot_folder)))
+else:
+    split = 'raw'
+    all_pred_f = filter(lambda s: 'raw-' in s and 'raw-meta' not in s, os.listdir('%s/pkl' % (plot_folder)))
 
 
 def PR(all_pred_f, detector):
@@ -85,17 +91,17 @@ def PR(all_pred_f, detector):
         return 0, 0
     return intersect / retrieved, intersect / relevant
 
-
 fig = plt.figure()
 
 
 if detect_config['class'] == 'RunWindowP':
-    outer_grid = xrange(1, detector.config['window_radius'] * 2, 2)
+    # outer_grid = xrange(1, detector.config['window_radius'] * 2, 2)
+    outer_grid = xrange(5, 15, 1)
     k = 'count_threshold'
 elif detect_config['class'] == 'NMS':
     outer_grid = xrange(1, detector.config['instance_radius'], 2)
     k = 'instance_radius'
-if arguments['--single']:
+if arguments['<grid_type>'] == 'single':
     out_type = 'single'
     ps = []
     rs = []
@@ -111,7 +117,21 @@ if arguments['--single']:
         arguments['<percent_grid>'])), rs, label='recall')
     plt.xlabel('prob_threshold')
     plt.ylabel('precision/recall')
-
+elif arguments['<grid_type>'] == 'auc' or arguments['<f_data_config>'] == 'AUC':
+    out_type = 'auc'
+    pr = []
+    rc = []
+    for prob_threshold in tqdm(xrange(0, 100, int(arguments['<percent_grid>']))):
+        detector.config['prob_threshold'] = prob_threshold * .01
+        print('Probability %f' % (prob_threshold * .01))
+        precision, recall = PR(all_pred_f, detector)
+        pr.append(precision)
+        rc.append(recall)
+    auc = metrics.auc(rc, pr)
+    plt.plot(rc, pr, label='AUC: %f' % (auc))
+    # plt.plot(rc, pr)
+    plt.xlabel('recall')
+    plt.ylabel('precision')
 else:
     out_type = 'many'
     for v in outer_grid:

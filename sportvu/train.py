@@ -29,7 +29,7 @@ import os
 # else:
 #     sys.path.append('/ais/gobi4/slwang/sports/sportvu/resnet')
 #     sys.path.append('/ais/gobi4/slwang/sports/sportvu')
-from sportvu.model.convnet2d import ConvNet2d
+from sportvu.model.convnet2d import ConvNet2d, ConvNet2dDeep
 from sportvu.model.convnet3d import ConvNet3d
 # data
 from sportvu.data.dataset import BaseDataset
@@ -80,7 +80,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
 
     val_x, val_t = loader.load_valid()
     # sanity(val_x, exp_name)
-    if model_config['class_name'] == 'ConvNet2d':
+    if model_config['class_name'] == 'ConvNet2d' or model_config['class_name'] == 'ConvNet2dDeep':
         val_x = np.rollaxis(val_x, 1, 4)
     elif model_config['class_name'] == 'ConvNet3d':
         val_x = np.rollaxis(val_x, 1, 5)
@@ -107,7 +107,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     # train_step = optimize_loss(cross_entropy, global_step, learning_rate,
     #             optimizer=lambda lr: tf.train.MomentumOptimizer(lr, .9))
     # train_step = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(cross_entropy, global_step=global_step)
-    train_step = optimize_loss(loss, global_step, learning_rate, optimizer=lambda lr: tf.train.AdamOptimizer(lr, .9))
+    train_step = optimize_loss(cross_entropy, global_step, learning_rate, optimizer=lambda lr: tf.train.AdamOptimizer(lr, .9))
 
     # reporting
     correct_prediction = tf.equal(tf.argmax(net.output(), 1), tf.argmax(y_, 1))
@@ -193,8 +193,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
         os.mkdir(CONFIG.logs.dir)
 
     tf.summary.scalar('cross_entropy', cross_entropy)
-    tf.summary.scalar('loss', loss)
-    tf.summary.scalar('accuray', accuracy)
+    tf.summary.scalar('Loss', loss)
     tf.summary.scalar('Accuracy', accuracy)
     tf.summary.scalar('Precision', precision)
     tf.summary.scalar('Recall', recall)
@@ -202,7 +201,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     tf.summary.histogram('label_distribution', y_)
     tf.summary.histogram('logits', net.logits)
 
-    if model_config['class_name'] == 'ConvNet2d':
+    if model_config['class_name'] == 'ConvNet2d' or model_config['class_name'] == 'ConvNet2dDeep':
         tf.summary.image('input', net.x, max_outputs=4)
     elif model_config['class_name'] == 'ConvNet3d':
         tf.summary.image('input', tf.reduce_sum(net.x, 1), max_outputs=4)
@@ -238,7 +237,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
         else:
             cloader.reset()
             continue
-        if model_config['class_name'] == 'ConvNet2d':
+        if model_config['class_name'] == 'ConvNet2d' or model_config['class_name'] == 'ConvNet2dDeep':
             batch_xs = np.rollaxis(batch_xs, 1, 4)
         elif model_config['class_name'] == 'ConvNet3d':
             batch_xs = np.rollaxis(batch_xs, 1, 5)
@@ -246,7 +245,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             raise Exception('input format not specified')
         feed_dict = net.input(batch_xs, None, True)
         feed_dict[y_] = batch_ys
-        if iter_ind % 3000 == 0 and iter_ind > 0:
+        if iter_ind % 5000 == 0 and iter_ind > 0:
             lrv *= .1
         feed_dict[learning_rate] = lrv
         summary, _ = sess.run([merged, train_step], feed_dict=feed_dict)
@@ -298,7 +297,7 @@ if __name__ == '__main__':
     exp_name = '%s-X-%s' % (model_name, data_name)
     fold_index = int(arguments['<fold_index>'])
     init_lr = 1e-3
-    max_iter = 30000
-    best_acc_delay = 10000
+    max_iter = 15000
+    best_acc_delay = 3000
     testing = arguments['--test']
     train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, testing)
