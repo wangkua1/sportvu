@@ -44,19 +44,23 @@ class EncDec(object):
         self.output_format = config['output_format']
         self.tf_start_frame = tf.placeholder(tf.float32, [self.batch_size, self.dec_input_dim])
 
-    def build(self):
-        # placeholders
-        tf_dec_input = tf.placeholder(tf.float32, [self.batch_size, self.decoder_time_size, self.dec_input_dim])
-        keep_prob = tf.placeholder(tf.float32)
+        ### Initialize TF variables
+
+        keep_prob = tf.placeholder(tf.float32, name='keep_prob')
         if self.decoder_init_noise is not None:
-            self.pl_decoder_noise_level = tf.placeholder(tf.float32, [])
+            self.pl_decoder_noise_level = tf.placeholder(tf.float32, [], name='dec_noise_lvl')
         if self.decoder_input_keep_prob is not None:
-            self.pl_decoder_input_keep_prob = tf.placeholder(tf.float32, [])
+            self.pl_decoder_input_keep_prob = tf.placeholder(tf.float32, [], name='dec_input_keep_prob')
         else:
             self.pl_decoder_input_keep_prob = tf.constant(1.)
 
-        self.teacher_forcing_stop = tf.placeholder(tf.int32)
-        tf_enc_input = tf.placeholder(tf.float32, self.encoder_input_shape) ## either (N, T, D), or (N, C, T, Y, X)
+        self.teacher_forcing_stop = tf.placeholder(tf.int32, name='tf_stop')
+        tf_enc_input = tf.placeholder(tf.float32, self.encoder_input_shape, name='enc_input') ## either (N, T, D), or (N, C, T, Y, X)
+        
+        self.tf_enc_input = tf_enc_input
+        # self.tf_dec_input = tf_dec_input
+        self.keep_prob = keep_prob
+
         # init weights/bias
         # [enc] pre-rnn Conv
         if self.encoder_input_shape is not None and len(self.encoder_input_shape) == 5:
@@ -65,19 +69,19 @@ class EncDec(object):
             self.encoder_time_size = self.encoder_input_shape[2]
             self.d1 = self.encoder_input_shape[3]
             self.d2 = self.encoder_input_shape[4]
-            W_conv = []
-            b_conv = []
+            self.W_conv = []
+            self.b_conv = []
             for layer_ind in xrange(len(self.conv_layers)):
-                W_conv.append(weight_variable(self.conv_layers[layer_ind]))
-                b_conv.append(bias_variable([self.conv_layers[layer_ind][-1]]))
+                self.W_conv.append(weight_variable(self.conv_layers[layer_ind]))
+                self.b_conv.append(bias_variable([self.conv_layers[layer_ind][-1]]))
            
             SHAPE_convlast = int(np.ceil(self.d1 / (2**len(self.conv_layers))) *
                                  np.ceil(self.d2 / (2**len(self.conv_layers))) *
                                  self.conv_layers[-1][-1])
         if self.encoder_input_shape is not None:
             # [enc] pre-rnn FC
-            W_fc = []
-            b_fc = []
+            self.W_fc = []
+            self.b_fc = []
             # first fc shape
             if len(self.encoder_input_shape) == 5:
                 shape_zero = SHAPE_convlast
@@ -85,23 +89,34 @@ class EncDec(object):
                 shape_zero = self.encoder_input_shape[-1]
             self.fc_layers.insert(0, shape_zero)
             for layer_ind in xrange(len(self.fc_layers) - 1):
-                W_fc.append(weight_variable(
+                self.W_fc.append(weight_variable(
                     [self.fc_layers[layer_ind], self.fc_layers[layer_ind + 1]]))
-                b_fc.append(bias_variable([self.fc_layers[layer_ind + 1]]))
+                self.b_fc.append(bias_variable([self.fc_layers[layer_ind + 1]]))
             # [enc] rnn
-            enc_cell = tf.contrib.rnn.BasicLSTMCell(self.enc_rnn_hid_dim, state_is_tuple=True)
+            self.enc_cell = tf.contrib.rnn.BasicLSTMCell(self.enc_rnn_hid_dim, state_is_tuple=True)
         # [glue] 2 linear weights taking enc states to decoder
-        tf_glue_1 = tf.Variable(tf.eye(self.dec_rnn_hid_dim))
-        tf_glue_2 = tf.Variable(tf.eye(self.dec_rnn_hid_dim))
+        self.tf_glue_1 = tf.Variable(tf.eye(self.dec_rnn_hid_dim))
+        self.tf_glue_2 = tf.Variable(tf.eye(self.dec_rnn_hid_dim))
         # [dec] pre-rnn
         self.W_dec_inp_hid = weight_variable([self.dec_input_dim, self.dec_rnn_hid_dim])
         self.b_dec_inp_hid = bias_variable([self.dec_rnn_hid_dim])
         # [dec] rnn 
-        dec_cell = tf.contrib.rnn.BasicLSTMCell(self.dec_rnn_hid_dim, state_is_tuple=True)
+        self.dec_cell = tf.contrib.rnn.BasicLSTMCell(self.dec_rnn_hid_dim, state_is_tuple=True)
         # [dec] post-rnn
         self.W_dec_out_hid = weight_variable([self.dec_rnn_hid_dim, self.dec_output_dim])
         # self.b_dec_out_hid = bias_variable([2]) ### probably don't need output bias
         
+
+
+    def build(self, tf_input=None):
+        tf_enc_input = self.tf_enc_input
+        keep_prob = self.keep_prob
+        # placeholders
+        if tf_input is None:
+            tf_dec_input = tf.placeholder(tf.float32, [self.batch_size, self.decoder_time_size, self.dec_input_dim])
+        else:
+            tf_dec_input = tf_input
+        self.tf_dec_input = tf_dec_input
         ## Build Graph
         # build eccoder
         if self.encoder_input_shape is not None:
@@ -116,13 +131,13 @@ class EncDec(object):
                 h_pool_drop = tf_r_enc_input
                 for layer_ind in xrange(len(self.conv_layers)):
                     h_conv = tf.nn.relu(
-                        conv2d(h_pool_drop, W_conv[layer_ind]) + b_conv[layer_ind])
+                        conv2d(h_pool_drop, self.W_conv[layer_ind]) + self.b_conv[layer_ind])
                     h_pool = max_pool_2x2(h_conv)
                     h_pool_drop = tf.nn.dropout(h_pool, keep_prob)
                 h_fc_drop = tf.reshape(h_pool_drop, [-1, SHAPE_convlast])
                 for layer_ind in xrange(len(self.fc_layers) - 1):
-                    h_fc = tf.nn.relu(tf.matmul(h_fc_drop, W_fc[
-                                      layer_ind]) + b_fc[layer_ind])
+                    h_fc = tf.nn.relu(tf.matmul(h_fc_drop, self.W_fc[
+                                      layer_ind]) + self.b_fc[layer_ind])
                     h_fc_drop = tf.nn.dropout(h_fc, keep_prob)
                 h_rnn = tf.reshape(h_fc_drop, (self.batch_size, self.encoder_time_size, self.enc_rnn_hid_dim))
             elif len(self.encoder_input_shape)== 3:
@@ -135,23 +150,23 @@ class EncDec(object):
                                     (self.batch_size*self.encoder_time_size, self.d))
                 h_fc_drop = tf_r_enc_input
                 for layer_ind in xrange(len(self.fc_layers) - 1):
-                    h_fc = tf.nn.relu(tf.matmul(h_fc_drop, W_fc[
-                                      layer_ind]) + b_fc[layer_ind])
+                    h_fc = tf.nn.relu(tf.matmul(h_fc_drop, self.W_fc[
+                                      layer_ind]) + self.b_fc[layer_ind])
                     h_fc_drop = tf.nn.dropout(h_fc, keep_prob)
                 h_rnn = tf.reshape(h_fc_drop, (self.batch_size, self.encoder_time_size, self.enc_rnn_hid_dim))
             # enc-rnn
-            _, enc_states = tf.contrib.rnn.static_rnn(enc_cell, tf.unstack(tf.transpose(h_rnn, [1,0,2])), dtype=tf.float32)
+            _, enc_states = tf.contrib.rnn.static_rnn(self.enc_cell, tf.unstack(tf.transpose(h_rnn, [1,0,2])), dtype=tf.float32)
         ##
 
         # build decoder
         dec_outputs = []
         sampled_outputs = []
         if self.encoder_input_shape is not None:
-            s1 = tf.matmul(enc_states[0],tf_glue_1)
-            s2 = tf.matmul(enc_states[1],tf_glue_2)
+            s1 = tf.matmul(enc_states[0],self.tf_glue_1)
+            s2 = tf.matmul(enc_states[1],self.tf_glue_2)
             state = (s1,s2)
         else:
-            state = dec_cell.zero_state(self.batch_size, tf.float32) 
+            state = self.dec_cell.zero_state(self.batch_size, tf.float32) 
         # stochasticity
         if self.decoder_init_noise is not None:
             if self.decoder_init_noise == 'gaussian':
@@ -178,7 +193,7 @@ class EncDec(object):
                 h_fc = tf.nn.relu(tf.matmul(input_, self.W_dec_inp_hid) + self.b_dec_inp_hid)
                 h_rnn = h_fc
                 ## RNN cell
-                h_rnn, state = dec_cell(h_rnn, state)
+                h_rnn, state = self.dec_cell(h_rnn, state)
                 # fc output
                 output = tf.matmul(h_rnn, self.W_dec_out_hid) 
                 dec_outputs.append(output)
@@ -186,19 +201,19 @@ class EncDec(object):
                 sampled_outputs.append(sampled_output)
         
         
-        self.tf_enc_input = tf_enc_input
-        self.tf_dec_input = tf_dec_input
-        self.keep_prob = keep_prob
         self.outputs = tf.transpose(dec_outputs, [1,0,2]) # -> (BATCH, TIME, 2)
         self.sampled_outputs = tf.transpose(sampled_outputs, [1,0,2]) # -> (BATCH, TIME, 2)
+        return self.outputs
 
     def input(self, dec_input, teacher_forcing_stop = None, 
-                enc_input=None, enc_keep_prob=None,decoder_noise_level=None, decoder_input_keep_prob=None):
+                enc_input=None, enc_keep_prob=None,decoder_noise_level=None, decoder_input_keep_prob=None, ret_dict=None):
         # if keep_prob == None: #default, 'training'
         #     keep_prob = self.value_keep_prob
-        ret_dict = {}
+        if ret_dict is None:
+            ret_dict = {}
         # ret_dict[self.tf_enc_input] = enc_input
-        ret_dict[self.tf_dec_input] = dec_input
+        if dec_input is not None:
+            ret_dict[self.tf_dec_input] = dec_input
         if teacher_forcing_stop == None: # default, always teacher-force
             ret_dict[self.teacher_forcing_stop] = int(self.decoder_time_size) 
         else:
@@ -233,14 +248,14 @@ class EncDec(object):
     def sample_trajectory(self):
         if self.output_format == 'location':
             return self.sample()
-        elif self.output_format == 'veloctiy':
+        elif self.output_format == 'velocity':
             vels = self.sample() # (N, T, D)
             traj = [self.tf_start_frame]
             for time_idx in xrange(self.decoder_time_size):
                 traj.append(vels[:,time_idx] +traj[-1])
             return tf.transpose(traj[1:], [1,0,2])
         else:
-            raise('specify output_format in model config')
+            raise Exception('specify output_format in model config, [{}]'.format(self.output_format))
 
 class Probabilistic(EncDec):
     """docstring for Location"""

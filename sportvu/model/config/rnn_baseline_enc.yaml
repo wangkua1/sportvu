@@ -1,7 +1,7 @@
 node1: &batch_size 32
 node2: &rnn_hid 64
 
-class_name: EncDec
+class_name: Probabilistic
 ### Dataset Configuration
 model_config: 
     dec_rnn_hid_dim: *rnn_hid
@@ -9,6 +9,7 @@ model_config:
     batch_size: *batch_size
     dec_input_dim: 22
     dec_output_dim: 22
+    output_format: 'velocity'
     ## encoder
     encoder_input_shape: [*batch_size, 10, 22]
     enc_rnn_hid_dim: *rnn_hid
