@@ -43,6 +43,19 @@ import cPickle as pkl
 # import matplotlib.pylab as plt
 # plt.ioff()
 # fig = plt.figure()
+
+
+### [Directory bookkeeping]
+# checkpoints
+if not os.path.exists('./gan-saves'):
+    os.mkdir('./gan-saves')
+# tensorboard
+if not os.path.exists('./gan-logs'):
+    os.mkdir('./gan-logs')
+### 
+
+
+
 CRITIC_ITERS = 5 
 
 arguments = docopt(__doc__)
@@ -160,10 +173,8 @@ elif MODE == 'dcgan':
     disc_cost += tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=disc_real, labels=tf.ones_like(disc_real)))
     disc_cost /= 2.
 
-    gen_train_op = tf.train.AdamOptimizer(learning_rate=2e-4, beta1=0.5).minimize(gen_cost,
-                                                                                  var_list=lib.params_with_name('Generator'))
-    disc_train_op = tf.train.AdamOptimizer(learning_rate=2e-4, beta1=0.5).minimize(disc_cost,
-                                                                                   var_list=lib.params_with_name('Discriminator.'))
+    gen_train_op = tf.train.AdamOptimizer(learning_rate=2e-4, beta1=0.5).minimize(gen_cost,var_list=lib.params_with_name('Generator'))
+    disc_train_op = tf.train.AdamOptimizer(learning_rate=2e-4, beta1=0.5).minimize(disc_cost,var_list=lib.params_with_name('Discriminator.'))
 
 
 
@@ -184,14 +195,7 @@ elif MODE == 'dcgan':
 #                            optimizer=lambda lr: tf.train.RMSPropOptimizer(lr),
 #                            clip_gradients=0.01, variables=main_model_variables)
 
-# [Monitoring]
-# # checkpoints
-# if not os.path.exists('./gan-saves'):
-#     os.mkdir('./gan-saves')
-# # tensorboard
-# if not os.path.exists('./gan-logs'):
-#     os.mkdir('./gan-logs')
-
+### [Monitoring]
 # v_loss = tf.Variable(tf.constant(0.0), trainable=False)
 # v_loss_pl = tf.placeholder(tf.float32, shape=[], name='v_loss_pl')
 # update_v_loss = tf.assign(v_loss, v_loss_pl, name='update_v_loss')
@@ -206,26 +210,28 @@ elif MODE == 'dcgan':
 # tf.summary.scalar('real_valid_loss', v_rloss)
 # tf.summary.scalar('real_traj_loss', v_tloss)
 
+merged = tf.summary.merge_all()
 
-# merged = tf.summary.merge_all()
-# log_folder = os.path.join('./gan-logs', exp_name)
 
-# saver = tf.train.Saver()
-# best_saver = tf.train.Saver()
 session = tf.InteractiveSession()
-
-# # remove existing log folder for the same model.
-# if os.path.exists(log_folder):
-#     import shutil
-#     shutil.rmtree(log_folder)
-
-# train_writer = tf.summary.FileWriter(
-#     os.path.join(log_folder, 'train'), sess.graph)
-# val_writer = tf.summary.FileWriter(
-#     os.path.join(log_folder, 'val'), sess.graph)
+sess = session
 tf.global_variables_initializer().run()
 
 
+### [Logging]
+log_folder = os.path.join('./gan-logs', exp_name)
+# remove existing log folder for the same model.
+if os.path.exists(log_folder):
+    import shutil
+    shutil.rmtree(log_folder)
+train_writer = tf.summary.FileWriter(
+    os.path.join(log_folder, 'train'), session.graph)
+val_writer = tf.summary.FileWriter(
+    os.path.join(log_folder, 'val'), session.graph)
+
+saver = tf.train.Saver()
+best_saver = tf.train.Saver()
+###
 
 def data_next(cloader):
     loaded = cloader.next()
@@ -312,8 +318,6 @@ for iter_ind in tqdm(range(max_iter)):
 
 
     # summary, tl = sess.run([merged, train_step], feed_dict=feed_dict)
-    # # print (tl)
-    # train_loss.append(tl)
     # train_writer.add_summary(summary, iter_ind)
 
 
@@ -334,17 +338,6 @@ for iter_ind in tqdm(range(max_iter)):
     #         else: ## done
     #             # print ('...')
     #             break
-    #         ## teacher-forced loss
-    #         feed_dict = net.input(dec_input, 
-    #                         teacher_forcing_stop=None,
-    #                         enc_input=enc_input,
-    #                         enc_keep_prob = 1.,
-    #                         decoder_noise_level = 0.,
-    #                         decoder_input_keep_prob = 1.
-    #                         )
-    #         feed_dict[y_] = dec_output
-    #         val_loss = sess.run(loss, feed_dict = feed_dict)
-    #         val_tf_loss.append(val_loss)
     #         ## real-loss
     #         feed_dict = net.input(dec_input, 
     #                         teacher_forcing_stop=1,
@@ -356,23 +349,6 @@ for iter_ind in tqdm(range(max_iter)):
     #         feed_dict[y_] = dec_output
     #         val_loss = sess.run(loss, feed_dict = feed_dict)
     #         val_real_loss.append(val_loss)
-    #         ### plot
-    #         pred = sess.run(net.sample(), feed_dict = feed_dict)
-    #         if pid is not None:
-    #             start_frame = history[:,pid, -1]
-    #         else:
-    #             start_frame = history[:,:,-1].reshape(history.shape[0],-1)
-
-    #         gt_future = experpolate_position(start_frame, dec_output)
-    #         pred_future = experpolate_position(start_frame, pred)
-
-    #         # imgs = make_sequence_prediction_image(history, gt_future, pred_future, pid)
-    #         pkl.dump((history, gt_future, pred_future, pid),
-    #                   open(os.path.join("./gan-logs/"+exp_name, 'iter-%g.pkl'%(iter_ind)),'wb'))
-
-    #         # for i in xrange(5):
-    #         #     plt.imshow(imgs[i])
-    #         #     plt.savefig(os.path.join("./gan-saves/", exp_name +'iter-%g-%g.png'%(iter_ind,i)))
             
 
     #         ## TODO: always monitor loss using trajectory
@@ -382,7 +358,7 @@ for iter_ind in tqdm(range(max_iter)):
     #             traj = wrapper_concatenated_last_dim(scale_last_dim, traj, upscale=True)
     #             gt_traj = wrapper_concatenated_last_dim(scale_last_dim, dec_output, upscale=True)
     #         elif model_config['class_name'] == 'Velocity':
-    #             gt_traj = gt_future[:,1:]
+    #             gt_traj = experpolate_position(start_frame, dec_output)[:,1:]
     #         else:
     #             raise NotImplementedError
     #         l_traj = dist_trajectory(traj, gt_traj)
@@ -404,10 +380,8 @@ for iter_ind in tqdm(range(max_iter)):
     #         print ('Saving Best Model to: %s' % p)
     #         save_path = best_saver.save(sess, p)
     #         best_val_real_loss = val_real_loss
-    # if iter_ind % 2000 == 0:
-    #     save_path = saver.save(sess, os.path.join(
-    #         "./gan-saves/", exp_name + '%d.ckpt' % iter_ind))
-    # if best_not_updated == best_acc_delay:
-    #     break
-# return _
-
+    if iter_ind % 2000 == 0:
+        save_path = saver.save(sess, os.path.join(
+            "./gan-saves/", exp_name + '%d.ckpt' % iter_ind))
+    if best_not_updated == best_acc_delay:
+        break

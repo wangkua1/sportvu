@@ -1,4 +1,4 @@
-"OBSOLETE...just keeping it for potential future references"
+kip "OBSOLETE...just keeping it for potential future references"
 
 # import tensorflow as tf
 # from ..loss import *
