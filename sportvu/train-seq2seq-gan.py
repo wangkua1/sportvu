@@ -79,7 +79,7 @@ best_acc_delay = 3000
 testing = arguments['--test']
 # train(data_config, model_config, exp_name, fold_index,
 #       init_lr, max_iter, best_acc_delay, eval(arguments['<loss>'])(),testing)
-# loss_class=  eval(arguments['<loss>'])()
+loss_class=  eval(arguments['<loss>'])()
 
 # def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, loss_class, testing=False):
 
@@ -180,36 +180,40 @@ elif MODE == 'dcgan':
 
 
 
-# # [Supervised loss]
-# y_ = tf.placeholder(tf.float32,
-#                     [model_config['model_config']['batch_size'],
-#                      model_config['model_config']['decoder_time_size'],
-#                      model_config['model_config']['dec_input_dim']])
-# learning_rate = tf.placeholder(tf.float32, [])
+# [Supervised loss]
+y_ = tf.placeholder(tf.float32,
+                    [model_config['model_config']['batch_size'],
+                     model_config['model_config']['decoder_time_size'],
+                     model_config['model_config']['dec_input_dim']])
+learning_rate = tf.placeholder(tf.float32, [])
 
-# loss = loss_class.build_tf_loss(net.output(), y_)
+loss = loss_class.build_tf_loss(net.output(), y_)
 
 
-# global_step = tf.Variable(0)
+global_step = tf.Variable(0)
 # train_step = optimize_loss(loss, global_step, learning_rate,
 #                            optimizer=lambda lr: tf.train.RMSPropOptimizer(lr),
 #                            clip_gradients=0.01, variables=main_model_variables)
 
 ### [Monitoring]
-# v_loss = tf.Variable(tf.constant(0.0), trainable=False)
-# v_loss_pl = tf.placeholder(tf.float32, shape=[], name='v_loss_pl')
-# update_v_loss = tf.assign(v_loss, v_loss_pl, name='update_v_loss')
-# v_rloss = tf.Variable(tf.constant(0.0), trainable=False)
-# v_rloss_pl = tf.placeholder(tf.float32, shape=[])
-# update_v_rloss = tf.assign(v_rloss, v_rloss_pl)
-# v_tloss = tf.Variable(tf.constant(0.0), trainable=False)
-# v_tloss_pl = tf.placeholder(tf.float32, shape=[])
-# update_v_tloss = tf.assign(v_tloss, v_tloss_pl)
-# tf.summary.scalar('loss', loss)
-# tf.summary.scalar('valid_loss', v_loss)
-# tf.summary.scalar('real_valid_loss', v_rloss)
-# tf.summary.scalar('real_traj_loss', v_tloss)
+def _add_content_to_dic(dic, new_name):
+    """
+    name: [Variable, Placeholder, AssignOp, emtpy list]
+    """
+    tfv = tf.Variable(tf.constant(0.0), trainable=False)
+    tfpl = tf.placeholder(tf.float32, shape=[], name=new_name)
+    tfop = tf.assign(tfv, tfpl, name='update_%s'%new_name)
+    dic[new_name] = [tfv,
+                     tfpl,
+                     tfop,
+                     []]
 
+monitor_dic = {}
+_add_content_to_dic(monitor_dic, 'v_rloss')
+_add_content_to_dic(monitor_dic, 'v_tloss')
+tf.summary.scalar('loss', loss)
+for k, v in monitor_dic.items():
+    tf.summary.scalar(k, v[0])
 merged = tf.summary.merge_all()
 
 
@@ -249,7 +253,8 @@ best_val_real_loss = np.inf
 best_not_updated = 0
 lrv = init_lr
 tfs = model_config['model_config']['decoder_time_size']
-train_loss = []
+
+
 for iter_ind in tqdm(range(max_iter)):
     best_not_updated += 1
     dec_input, dec_output, enc_input,(history, pid)= data_next(cloader)
@@ -321,65 +326,65 @@ for iter_ind in tqdm(range(max_iter)):
     # train_writer.add_summary(summary, iter_ind)
 
 
-
-
-
-    # # Validate
-    # if iter_ind % 1000 == 0:
-    #     val_tf_loss = []
-    #     val_real_loss = []
-    #     val_traj_loss = []
-    #     ## loop throught valid examples
-    #     while True:
-    #         loaded = cloader.load_valid()
-    #         if loaded is not None:
-    #             dec_input, dec_output, enc_input, (meta)  = loaded
-    #             history, pid = meta
-    #         else: ## done
-    #             # print ('...')
-    #             break
-    #         ## real-loss
-    #         feed_dict = net.input(dec_input, 
-    #                         teacher_forcing_stop=1,
-    #                         enc_input=enc_input,
-    #                         enc_keep_prob = 1.,
-    #                         decoder_noise_level = 0.,
-    #                         decoder_input_keep_prob = 1.
-    #                         )
-    #         feed_dict[y_] = dec_output
-    #         val_loss = sess.run(loss, feed_dict = feed_dict)
-    #         val_real_loss.append(val_loss)
+    # Validate
+    if iter_ind % 1000 == 0:
+        ## loop throught valid examples
+        while True:
+            loaded = cloader.load_valid()
+            if loaded is not None:
+                dec_input, dec_output, enc_input, (meta)  = loaded
+                history, pid = meta
+            else: ## done
+                # print ('...')
+                break
+            ## real-loss
+            feed_dict = net.input(dec_input, 
+                            teacher_forcing_stop=1,
+                            enc_input=enc_input,
+                            enc_keep_prob = 1.,
+                            decoder_noise_level = 0.,
+                            decoder_input_keep_prob = 1.
+                            )
+            feed_dict[y_] = dec_output
+            val_loss = sess.run(loss, feed_dict = feed_dict)
+            monitor_dic['v_rloss'][-1].append(val_loss)
             
 
-    #         ## TODO: always monitor loss using trajectory
-    #         net.aux_feed_dict({'start_frame':start_frame}, feed_dict)
-    #         traj = sess.run(net.sample_trajectory(), feed_dict = feed_dict)
-    #         if model_config['class_name'] == 'Location': ### scale 
-    #             traj = wrapper_concatenated_last_dim(scale_last_dim, traj, upscale=True)
-    #             gt_traj = wrapper_concatenated_last_dim(scale_last_dim, dec_output, upscale=True)
-    #         elif model_config['class_name'] == 'Velocity':
-    #             gt_traj = experpolate_position(start_frame, dec_output)[:,1:]
-    #         else:
-    #             raise NotImplementedError
-    #         l_traj = dist_trajectory(traj, gt_traj)
-    #         val_traj_loss.append(l_traj)
-    #     ## TODO: evaluate real-loss on training set
-    #     val_tf_loss = np.mean(val_tf_loss)
-    #     val_real_loss = np.mean(val_real_loss)
-    #     val_traj_loss = np.mean(val_traj_loss)
-    #     print ('[Iter: %g] Train Loss: %g, Validation TF Loss: %g | Real Loss: %g | Real Traj Loss: %g' %(iter_ind,np.mean(train_loss),val_tf_loss, val_real_loss, val_traj_loss))
-    #     train_loss = []
-    #     feed_dict[v_loss_pl] = val_tf_loss
-    #     feed_dict[v_rloss_pl] = val_real_loss
-    #     feed_dict[v_tloss_pl] = val_traj_loss
-    #     _,_,_, summary = sess.run([update_v_loss,update_v_rloss,update_v_tloss, merged], feed_dict=feed_dict)
-    #     val_writer.add_summary(summary, iter_ind)
-    #     if val_real_loss < best_val_real_loss:
-    #         best_not_updated = 0
-    #         p = os.path.join("./gan-saves/", exp_name + '.ckpt.best')
-    #         print ('Saving Best Model to: %s' % p)
-    #         save_path = best_saver.save(sess, p)
-    #         best_val_real_loss = val_real_loss
+            ## TODO: always monitor loss using trajectory
+            net.aux_feed_dict({'start_frame':start_frame}, feed_dict)
+            traj = sess.run(net.sample_trajectory(), feed_dict = feed_dict)
+            if net.output_format == 'location': ### scale 
+                traj = wrapper_concatenated_last_dim(scale_last_dim, traj, upscale=True)
+                gt_traj = wrapper_concatenated_last_dim(scale_last_dim, dec_output, upscale=True)
+            elif net.output_format == 'velocity':
+                gt_traj = experpolate_position(start_frame, dec_output)[:,1:]
+            else:
+                raise NotImplementedError
+            l_traj = dist_trajectory(traj, gt_traj)
+            monitor_dic['v_tloss'][-1].append(l_traj)
+        
+        # compute mean over valid batches
+        for k, v in monitor_dic.items():
+            v[-1] = np.mean(v[-1])
+        # print to screen
+        print_str = '[Iter: %g] '%(iter_ind)
+        for k, v in monitor_dic.items():
+            print_str += '| %s: %g'%(k, v[-1])
+        print (print_str)
+        # prepare feed_dict for tensorboard
+        for k, v in monitor_dic.items():
+            feed_dict[v[1]] = v[-1]
+            v[-1] = []
+        # update tensorboard
+        tmp = sess.run([v[2] for v in monitor_dic.values()] +[merged], feed_dict=feed_dict)
+        val_writer.add_summary(tmp[-1], iter_ind)
+        # Best model?
+        # if val_real_loss < best_val_real_loss:
+        #     best_not_updated = 0
+        #     p = os.path.join("./gan-saves/", exp_name + '.ckpt.best')
+        #     print ('Saving Best Model to: %s' % p)
+        #     save_path = best_saver.save(sess, p)
+        #     best_val_real_loss = val_real_loss
     if iter_ind % 2000 == 0:
         save_path = saver.save(sess, os.path.join(
             "./gan-saves/", exp_name + '%d.ckpt' % iter_ind))
