@@ -57,6 +57,13 @@ if not os.path.exists('./gan-logs'):
 
 
 CRITIC_ITERS = 5 
+MODE = 'wgan'
+
+init_lr = 1e-4
+max_iter = 100000
+best_acc_delay = 3000
+
+
 
 arguments = docopt(__doc__)
 print ("...Docopt... ")
@@ -73,13 +80,12 @@ exp_name = '%s-X-%s-X-%s' % (model_name, data_name,arguments['<loss>'])
 if arguments['--prefix']:
     exp_name = arguments['<p>']+':'+exp_name
 fold_index = int(arguments['<fold_index>'])
-init_lr = 1e-4
-max_iter = 100000
-best_acc_delay = 3000
 testing = arguments['--test']
+loss_class=  eval(arguments['<loss>'])()
+
+
 # train(data_config, model_config, exp_name, fold_index,
 #       init_lr, max_iter, best_acc_delay, eval(arguments['<loss>'])(),testing)
-loss_class=  eval(arguments['<loss>'])()
 
 # def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, loss_class, testing=False):
 
@@ -92,14 +98,9 @@ if 'negative_fraction_hard' in data_config:
 else:
     nfh = 0
 
-loader = Seq2SeqLoader(dataset, extractor, data_config[
+cloader = Seq2SeqLoader(dataset, extractor, data_config[
     'batch_size'], fraction_positive=0.5,
     negative_fraction_hard=nfh, move_N_neg_to_val=1000)
-Q_size = 100
-N_thread = 4
-# cloader = ConcurrentBatchIterator(
-#     loader, max_queue_size=Q_size, num_threads=N_thread)
-cloader = loader
 
 with tf.variable_scope("main_model") as vs:
     net = eval(model_config['class_name'])(model_config['model_config'])
@@ -128,7 +129,7 @@ disc_fake = _build_disc(disc_net, fake_data)
 gen_params = main_model_variables
 disc_params = disc_net_variables
 
-MODE = 'wgan'
+
 if MODE == 'wgan':
     gen_cost = -tf.reduce_mean(disc_fake)
     disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
@@ -185,15 +186,14 @@ y_ = tf.placeholder(tf.float32,
                     [model_config['model_config']['batch_size'],
                      model_config['model_config']['decoder_time_size'],
                      model_config['model_config']['dec_input_dim']])
+sup_loss = loss_class.build_tf_loss(net.output(), y_)
+
+
 learning_rate = tf.placeholder(tf.float32, [])
-
-loss = loss_class.build_tf_loss(net.output(), y_)
-
-
 global_step = tf.Variable(0)
-# train_step = optimize_loss(loss, global_step, learning_rate,
-#                            optimizer=lambda lr: tf.train.RMSPropOptimizer(lr),
-#                            clip_gradients=0.01, variables=main_model_variables)
+sup_train_step = optimize_loss(sup_loss, global_step, learning_rate,
+                           optimizer=lambda lr: tf.train.RMSPropOptimizer(lr),
+                           clip_gradients=0.01, variables=main_model_variables)
 
 ### [Monitoring]
 def _add_content_to_dic(dic, new_name):
@@ -208,11 +208,12 @@ def _add_content_to_dic(dic, new_name):
                      tfop,
                      []]
 
-monitor_dic = {}
-_add_content_to_dic(monitor_dic, 'v_rloss')
-_add_content_to_dic(monitor_dic, 'v_tloss')
-tf.summary.scalar('loss', loss)
-for k, v in monitor_dic.items():
+val_monitor_dic = {}
+_add_content_to_dic(val_monitor_dic, 'v_rloss')
+_add_content_to_dic(val_monitor_dic, 'v_tloss')
+train_monitor_dic = {}
+_add_content_to_dic(train_monitor_dic, 't_loss')
+for k, v in val_monitor_dic.items()+train_monitor_dic.items():
     tf.summary.scalar(k, v[0])
 merged = tf.summary.merge_all()
 
@@ -228,25 +229,40 @@ log_folder = os.path.join('./gan-logs', exp_name)
 if os.path.exists(log_folder):
     import shutil
     shutil.rmtree(log_folder)
-train_writer = tf.summary.FileWriter(
-    os.path.join(log_folder, 'train'), session.graph)
-val_writer = tf.summary.FileWriter(
-    os.path.join(log_folder, 'val'), session.graph)
+tf_writer = tf.summary.FileWriter(
+    log_folder, session.graph)
 
 saver = tf.train.Saver()
 best_saver = tf.train.Saver()
 ###
 
-def data_next(cloader):
-    loaded = cloader.next()
+def data_next(load_f, conti=True):
+    loaded = load_f()
     if loaded is not None:
-        dec_input, dec_output, enc_input,_= loaded
+        dec_input, dec_output, enc_input,(history,pid)= loaded
     else:
-        cloader.reset()
-        loaded = cloader.next()
-        dec_input, dec_output, enc_input,_= loaded
-        # continue
-    return dec_input, dec_output, enc_input,_
+        if conti:
+            cloader.reset()
+            loaded = cloader.next()
+            dec_input, dec_output, enc_input,(history,pid)= loaded
+        else: ## don't loop
+            return None
+    if pid is not None:
+        start_frame = history[:,pid, -1]
+    else:
+        start_frame = history[:,:,-1].reshape(history.shape[0],-1)
+    return dec_input, dec_output, enc_input,start_frame
+
+def prepare_traj(traj, dec_output, start_frame, net):
+    if net.output_format == 'location': ### scale 
+        traj = wrapper_concatenated_last_dim(scale_last_dim, traj, upscale=True)
+        gt_traj = wrapper_concatenated_last_dim(scale_last_dim, dec_output, upscale=True)
+    elif net.output_format == 'velocity':
+        gt_traj = experpolate_position(start_frame, dec_output)[:,1:]
+    else:
+        raise NotImplementedError
+    return traj, gt_traj
+    
 # [Train]
 best_val_teacher_forced_loss = np.inf
 best_val_real_loss = np.inf
@@ -256,19 +272,18 @@ tfs = model_config['model_config']['decoder_time_size']
 
 
 for iter_ind in tqdm(range(max_iter)):
+    ## done?
     best_not_updated += 1
-    dec_input, dec_output, enc_input,(history, pid)= data_next(cloader)
-
-    #### TODO: simplify later
-    if pid is not None:
-        start_frame = history[:,pid, -1]
-    else:
-        start_frame = history[:,:,-1].reshape(history.shape[0],-1)
-    
+    ## scheduling
     if iter_ind>0 and iter_ind % 5000 == 0:
         tfs -= 5
-    if iter_ind ==2000:
+    if iter_ind ==10000000:## currently not using
         lrv *= .1
+    
+
+    ### [Update Generator/Predictor]
+    ## ADV
+    dec_input, dec_output, enc_input,start_frame= data_next(cloader.next)
     feed_dict = net.input(dec_input, 
                             teacher_forcing_stop=np.max([1, tfs]),
                             enc_input=enc_input
@@ -278,64 +293,51 @@ for iter_ind in tqdm(range(max_iter)):
                             teacher_forcing_stop=np.max([1, tfs]),
                             enc_input=enc_input, ret_dict=feed_dict
                             )
-    # feed_dict[y_] = dec_output
-    # feed_dict[learning_rate] = lrv
-    
-    # Train generator
     if iter_ind > 0:
         _ = session.run(gen_train_op, feed_dict=feed_dict)
+    ## SUP
+    feed_dict[y_] = dec_output
+    feed_dict[learning_rate] = lrv
+    tl = sess.run(sup_train_step, feed_dict=feed_dict)
+    train_monitor_dic['t_loss'][-1].append(tl)
 
+    ## update Train Monitors
+    # compute mean over valid batches
+    for k, v in train_monitor_dic.items():
+        v[-1] = np.mean(v[-1])
+    # prepare feed_dict for tensorboard
+    for k, v in train_monitor_dic.items():
+        feed_dict[v[1]] = v[-1]
+        v[-1] = []
+    tmp = sess.run([v[2] for v in train_monitor_dic.values()] +[merged], feed_dict=feed_dict)
+    tf_writer.add_summary(tmp[-1], iter_ind)  
 
-    # Train critic
+    ### [Update Loss (i.e. discriminator)]
     if MODE == 'dcgan':
         disc_iters = 1
     else:
         disc_iters = CRITIC_ITERS
     for i in xrange(disc_iters):
-        dec_input, dec_output, enc_input,(history, pid)= data_next(cloader)
-
-        #### TODO: simplify later
-        if pid is not None:
-            start_frame = history[:,pid, -1]
-        else:
-            start_frame = history[:,:,-1].reshape(history.shape[0],-1)
-        if net.output_format == 'location': ### scale 
-            traj = wrapper_concatenated_last_dim(scale_last_dim, traj, upscale=True)
-            gt_traj = wrapper_concatenated_last_dim(scale_last_dim, dec_output, upscale=True)
-        elif net.output_format == 'velocity':
-            gt_traj = experpolate_position(start_frame, dec_output)[:,1:]
-        else:
-            raise NotImplementedError
-        #### end of TODO
+        dec_input, dec_output, enc_input,start_frame= data_next(cloader.next)
+        traj, gt_traj= prepare_traj(None, dec_output, start_frame, net)
         ### setup input for disc_net
         feed_dict = disc_net.input(dec_input, 
                             teacher_forcing_stop=np.max([1, tfs]),
                             enc_input=enc_input
                             )
-        # feed_dict[y_] = dec_output
-        # feed_dict[learning_rate] = lrv
         feed_dict[real_data] = gt_traj
         _disc_cost, _ = session.run([disc_cost, disc_train_op], feed_dict=feed_dict)
         if MODE == 'wgan':
             _ = session.run(clip_disc_weights)
 
 
-
-
-    # summary, tl = sess.run([merged, train_step], feed_dict=feed_dict)
-    # train_writer.add_summary(summary, iter_ind)
-
-
     # Validate
-    if iter_ind % 1000 == 0:
+    if iter_ind % 10 == 0:
         ## loop throught valid examples
         while True:
-            loaded = cloader.load_valid()
-            if loaded is not None:
-                dec_input, dec_output, enc_input, (meta)  = loaded
-                history, pid = meta
-            else: ## done
-                # print ('...')
+            try:
+                dec_input, dec_output, enc_input,start_frame= data_next(cloader.load_valid, conti=False)
+            except TypeError: # None was returned
                 break
             ## real-loss
             feed_dict = net.input(dec_input, 
@@ -346,38 +348,31 @@ for iter_ind in tqdm(range(max_iter)):
                             decoder_input_keep_prob = 1.
                             )
             feed_dict[y_] = dec_output
-            val_loss = sess.run(loss, feed_dict = feed_dict)
-            monitor_dic['v_rloss'][-1].append(val_loss)
+            val_loss = sess.run(sup_loss, feed_dict = feed_dict)
+            val_monitor_dic['v_rloss'][-1].append(val_loss)
             
-
-            ## TODO: always monitor loss using trajectory
+            ## traj-loss
             net.aux_feed_dict({'start_frame':start_frame}, feed_dict)
             traj = sess.run(net.sample_trajectory(), feed_dict = feed_dict)
-            if net.output_format == 'location': ### scale 
-                traj = wrapper_concatenated_last_dim(scale_last_dim, traj, upscale=True)
-                gt_traj = wrapper_concatenated_last_dim(scale_last_dim, dec_output, upscale=True)
-            elif net.output_format == 'velocity':
-                gt_traj = experpolate_position(start_frame, dec_output)[:,1:]
-            else:
-                raise NotImplementedError
+            traj, gt_traj= prepare_traj(traj, dec_output, start_frame, net)
             l_traj = dist_trajectory(traj, gt_traj)
-            monitor_dic['v_tloss'][-1].append(l_traj)
+            val_monitor_dic['v_tloss'][-1].append(l_traj)
         
         # compute mean over valid batches
-        for k, v in monitor_dic.items():
+        for k, v in val_monitor_dic.items():
             v[-1] = np.mean(v[-1])
         # print to screen
         print_str = '[Iter: %g] '%(iter_ind)
-        for k, v in monitor_dic.items():
+        for k, v in val_monitor_dic.items():
             print_str += '| %s: %g'%(k, v[-1])
         print (print_str)
         # prepare feed_dict for tensorboard
-        for k, v in monitor_dic.items():
+        for k, v in val_monitor_dic.items():
             feed_dict[v[1]] = v[-1]
             v[-1] = []
         # update tensorboard
-        tmp = sess.run([v[2] for v in monitor_dic.values()] +[merged], feed_dict=feed_dict)
-        val_writer.add_summary(tmp[-1], iter_ind)
+        tmp = sess.run([v[2] for v in val_monitor_dic.values()] +[merged], feed_dict=feed_dict)
+        tf_writer.add_summary(tmp[-1], iter_ind)
         # Best model?
         # if val_real_loss < best_val_real_loss:
         #     best_not_updated = 0
