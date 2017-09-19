@@ -62,7 +62,7 @@ MODE = 'wgan'
 init_lr = 1e-4
 max_iter = 100000
 best_acc_delay = 3000
-
+best_of_k = 20
 
 
 arguments = docopt(__doc__)
@@ -211,6 +211,7 @@ def _add_content_to_dic(dic, new_name):
 val_monitor_dic = {}
 _add_content_to_dic(val_monitor_dic, 'v_rloss')
 _add_content_to_dic(val_monitor_dic, 'v_tloss')
+_add_content_to_dic(val_monitor_dic, 'v_bestOf%i'%best_of_k)
 train_monitor_dic = {}
 _add_content_to_dic(train_monitor_dic, 't_loss')
 for k, v in val_monitor_dic.items()+train_monitor_dic.items():
@@ -357,7 +358,16 @@ for iter_ind in tqdm(range(max_iter)):
             traj, gt_traj= prepare_traj(traj, dec_output, start_frame, net)
             l_traj = dist_trajectory(traj, gt_traj)
             val_monitor_dic['v_tloss'][-1].append(l_traj)
-        
+            
+            ## best-of-K loss
+            l_trajs = []
+            for _ in xrange(best_of_k):
+                traj = sess.run(net.sample_trajectory(), feed_dict = feed_dict)
+                traj, gt_traj= prepare_traj(traj, dec_output, start_frame, net)
+                l_trajs.append(dist_trajectory(traj, gt_traj, keep_first=True))
+            l_trajs = np.array(l_trajs) # (K, batch-size)
+            l_traj = np.min(l_trajs, 0).mean()
+            val_monitor_dic['v_bestOf%i'%best_of_k][-1].append(l_traj)
         # compute mean over valid batches
         for k, v in val_monitor_dic.items():
             v[-1] = np.mean(v[-1])
@@ -379,7 +389,7 @@ for iter_ind in tqdm(range(max_iter)):
         #     p = os.path.join("./gan-saves/", exp_name + '.ckpt.best')
         #     print ('Saving Best Model to: %s' % p)
         #     save_path = best_saver.save(sess, p)
-        #     best_val_real_loss = val_real_loss
+        #     best_val_real_loss = val_real_loss    
     if iter_ind % 2000 == 0:
         save_path = saver.save(sess, os.path.join(
             "./gan-saves/", exp_name + '%d.ckpt' % iter_ind))

@@ -44,7 +44,7 @@ def filter_discontinuous(seqs, mean_diff_thresh=2.):
     else:
         return seqs[arr]
 
-def dist_trajectory(y,y_):
+def dist_trajectory(y,y_,keep_first=False):
     """
     both numpy arrays with shape (N, T, 2*#players)
         return sum_(time, players) L2_dist
@@ -53,4 +53,7 @@ def dist_trajectory(y,y_):
         return np.reshape(y, (y.shape[0],y.shape[1], -1, 2))
     y = _reshape(y)
     y_ = _reshape(y_)
-    return np.power(np.sum(np.power((y-y_), 2),-1),.5).mean()
+    if keep_first:
+        return np.power(np.sum(np.power((y-y_), 2),-1),.5).mean(-1).mean(-1)
+    else:
+        return np.power(np.sum(np.power((y-y_), 2),-1),.5).mean()
