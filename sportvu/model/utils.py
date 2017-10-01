@@ -27,8 +27,9 @@ def max_pool3d_2x2x2(x):
 
 
 def bn(x, training):
-  return tf.layers.batch_normalization(x, axis=-1, training=training
-                                       )
+  return tf.layers.batch_normalization(x, axis=-1, training=training)
+
+
 def gaussian_noise_layer(input_layer, std):
   noise = tf.random_normal(shape=tf.shape(input_layer), mean=0.0, stddev=std, dtype=tf.float32)
   return input_layer + noise

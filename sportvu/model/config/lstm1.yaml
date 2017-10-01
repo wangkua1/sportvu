@@ -1,0 +1,16 @@
+class_name: LSTM
+### Dataset Configuration
+model_config:
+    d1: 25
+    d2: 25
+    conv_layers: [[5, 5, 3, 32], [5, 5, 32, 64], [5, 5, 64, 128]]
+    fc_layers: [128, 2]
+    keep_prob: 0.5
+    rnn_hid_dim: 256
+    encoder_time_size: 50
+    batch_size: 128
+    pool: True
+    cell_type: 'LayerNormBasicLSTMCell'
+    num_of_cells: 2
+    frame_rate: 25
+    bn: True

@@ -11,6 +11,7 @@ Arguments:
 
 Example:
     python train.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml --test --train 5
+    python train.py 0 rev3-lstm.yaml lstm1.yaml
 Options:
     --negative_fraction_hard=<percent> [default: 0]
 """
@@ -24,17 +25,19 @@ import tensorflow as tf
 optimize_loss = tf.contrib.layers.optimize_loss
 import sys
 import os
+import matplotlib.pyplot as plt
 # if os.environ['HOME'] == '/u/wangkua1':  # jackson guppy
 #     sys.path.append('/u/wangkua1/toolboxes/resnet')
 # else:
 #     sys.path.append('/ais/gobi4/slwang/sports/sportvu/resnet')
 #     sys.path.append('/ais/gobi4/slwang/sports/sportvu')
 from sportvu.model.convnet2d import ConvNet2d, ConvNet2dDeep
+from sportvu.model.lstm import LSTM
 from sportvu.model.convnet3d import ConvNet3d
 # data
 from sportvu.data.dataset import BaseDataset
-from sportvu.data.extractor import BaseExtractor
-from sportvu.data.loader import PreprocessedLoader, EventLoader, SequenceLoader, BaseLoader
+from sportvu.data.extractor import BaseExtractor, LSTMExtractor, Seq2SeqExtractor
+from sportvu.data.loader import PreprocessedLoader, EventLoader, SequenceLoader, BaseLoader, LSTMLoader, Seq2SeqLoader
 # configuration
 import config as CONFIG
 # sanity
@@ -58,7 +61,16 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     else:
         nfh = 0
         pfh = 0.5
-    if 'version' in data_config['extractor_config'] and data_config['extractor_config']['version'] >= 2:
+    if model_config['class_name'] == 'LSTM':
+        extractor = LSTMExtractor(data_config)
+        loader = LSTMLoader(
+            dataset,
+            extractor,
+            data_config['batch_size'],
+            fraction_positive=pfh,
+            negative_fraction_hard=nfh
+        )
+    elif 'version' in data_config['extractor_config'] and data_config['extractor_config']['version'] >= 2:
         loader = SequenceLoader(
             dataset,
             extractor,
@@ -69,20 +81,21 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     elif 'no_extract' in data_config and data_config['no_extract']:
         loader = EventLoader(dataset, extractor, None, fraction_positive=0.5)
     else:
-        loader = PreprocessedLoader(
-            dataset, extractor, None, fraction_positive=0.5)
+        loader = PreprocessedLoader(dataset, extractor, None, fraction_positive=0.5)
     Q_size = 100
     N_thread = 4
     # cloader = ConcurrentBatchIterator(
     #     loader, max_queue_size=Q_size, num_threads=N_thread)
     cloader = loader
 
+    if loader.__class__.__name__ == 'Seq2SeqLoader':
+        val_x, output, target_sequence, target_output = loader.load_valid()
+    else:
+        val_x, val_t = loader.load_valid()
 
-    val_x, val_t = loader.load_valid()
-    # sanity(val_x, exp_name)
     if model_config['class_name'] == 'ConvNet2d' or model_config['class_name'] == 'ConvNet2dDeep':
         val_x = np.rollaxis(val_x, 1, 4)
-    elif model_config['class_name'] == 'ConvNet3d':
+    elif model_config['class_name'] == 'ConvNet3d' or model_config['class_name'] == 'LSTM':
         val_x = np.rollaxis(val_x, 1, 5)
     else:
         raise Exception('input format not specified')
@@ -98,16 +111,20 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     loss = tf.reduce_mean(cross_entropy + l2_loss)
 
     # optimize
-    # train_step = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
-    global_step = tf.Variable(0)
-    learning_rate = tf.placeholder(tf.float32, [])
-    # learning_rate = tf.train.exponential_decay(init_lr, global_step, 10000, 0.96, staircase=True)
-    # train_step = optimize_loss(cross_entropy, global_step, learning_rate,
-    #             optimizer=lambda lr: tf.train.AdamOptimizer(lr))
-    # train_step = optimize_loss(cross_entropy, global_step, learning_rate,
-    #             optimizer=lambda lr: tf.train.MomentumOptimizer(lr, .9))
-    # train_step = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(cross_entropy, global_step=global_step)
-    train_step = optimize_loss(cross_entropy, global_step, learning_rate, optimizer=lambda lr: tf.train.AdamOptimizer(lr, .9))
+    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    with tf.control_dependencies(update_ops):
+        # Ensures that we execute the update_ops before performing the train_step
+        # train_step = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
+        global_step = tf.Variable(0)
+        learning_rate = tf.placeholder(tf.float32, [])
+        training = tf.placeholder(tf.bool)
+        # learning_rate = tf.train.exponential_decay(init_lr, global_step, 10000, 0.96, staircase=True)
+        # train_step = optimize_loss(cross_entropy, global_step, learning_rate,
+        #             optimizer=lambda lr: tf.train.AdamOptimizer(lr))
+        # train_step = optimize_loss(cross_entropy, global_step, learning_rate,
+        #             optimizer=lambda lr: tf.train.MomentumOptimizer(lr, .9))
+        # train_step = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(cross_entropy, global_step=global_step)
+        train_step = optimize_loss(cross_entropy, global_step, learning_rate, optimizer=lambda lr: tf.train.AdamOptimizer(lr, .9))
 
     # reporting
     correct_prediction = tf.equal(tf.argmax(net.output(), 1), tf.argmax(y_, 1))
@@ -203,7 +220,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
 
     if model_config['class_name'] == 'ConvNet2d' or model_config['class_name'] == 'ConvNet2dDeep':
         tf.summary.image('input', net.x, max_outputs=4)
-    elif model_config['class_name'] == 'ConvNet3d':
+    elif model_config['class_name'] == 'ConvNet3d' or model_config['class_name'] == 'LSTM':
         tf.summary.image('input', tf.reduce_sum(net.x, 1), max_outputs=4)
     else:
         raise Exception('input format not specified')
@@ -241,8 +258,26 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             batch_xs = np.rollaxis(batch_xs, 1, 4)
         elif model_config['class_name'] == 'ConvNet3d':
             batch_xs = np.rollaxis(batch_xs, 1, 5)
+        elif model_config['class_name'] == 'LSTM':
+            batch_xs = np.rollaxis(batch_xs, 1, 5)
+            batch_xs = batch_xs[:, ::model_config['model_config']['frame_rate']]
         else:
             raise Exception('input format not specified')
+
+        # check
+        # if model_config['class_name'] == 'LSTM':
+        #     for ind, batch_img in enumerate(batch_xs):
+        #         img = np.sum(batch_img, axis=0)
+        #         plt.imshow(img)
+        #         plt.show()
+        #         plt.close()
+        # elif model_config['class_name'] == 'ConvNet2d':
+        #     for ind, batch_img in enumerate(batch_xs):
+        #         plt.imshow(batch_img)
+        #         plt.show()
+        #         plt.close()
+
+
         feed_dict = net.input(batch_xs, None, True)
         feed_dict[y_] = batch_ys
         if iter_ind % 5000 == 0 and iter_ind > 0:
@@ -258,10 +293,32 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             train_confusion_matrix = confusion_matrix.eval(feed_dict=feed_dict)
 
             # validate trained model
-            feed_dict = net.input(val_x, 1, False)
-            feed_dict[y_] = val_t
-            summary, val_ce, val_accuracy = sess.run(
-                [merged, cross_entropy, accuracy], feed_dict=feed_dict)
+            if model_config['class_name'] == 'LSTM':
+                # model does not fit full val set, need to run minibatches
+                val_tf_loss = []
+                val_tf_accuracy = []
+                while True:
+                    loaded = cloader.load_valid()
+                    if loaded is not None:
+                        val_x, val_t = loaded
+                        val_x = np.rollaxis(val_x, 1, 5)
+                        val_x = val_x[:,::model_config['model_config']['frame_rate']]
+                        feed_dict = net.input(val_x, 1, False)
+                        feed_dict[y_] = val_t
+                        summary, val_ce, val_accuracy = sess.run([merged, cross_entropy, accuracy], feed_dict=feed_dict)
+                        val_tf_loss.append(val_ce)
+                        val_tf_accuracy.append(val_accuracy)
+                    else:  ## done
+                        summary, val_ce, val_accuracy = sess.run([merged, cross_entropy, accuracy], feed_dict=feed_dict)
+                        val_tf_loss.append(val_ce)
+                        val_tf_accuracy.append(val_accuracy)
+                        val_ce = np.mean(val_tf_loss)
+                        val_accuracy = np.mean(val_accuracy)
+                        break
+            else:
+                feed_dict = net.input(val_x, 1, False)
+                feed_dict[y_] = val_t
+                summary, val_ce, val_accuracy = sess.run([merged, cross_entropy, accuracy], feed_dict=feed_dict)
             val_writer.add_summary(summary, iter_ind)
             print("step %d, training accuracy %g, validation accuracy %g, train ce %g,  val ce %g" %
                   (iter_ind, train_accuracy, val_accuracy, train_ce, val_ce))
@@ -298,6 +355,6 @@ if __name__ == '__main__':
     fold_index = int(arguments['<fold_index>'])
     init_lr = 1e-3
     max_iter = 15000
-    best_acc_delay = 3000
+    best_acc_delay = 5000
     testing = arguments['--test']
     train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, testing)
