@@ -3,9 +3,10 @@
 at 1 single setting
 Usage:
     detection_from_raw_pred.py <fold_index> <f_data_config> <f_model_config> <f_detect_config> --train
+    detection_from_raw_pred.py <fold_index> <f_data_config> <f_model_config> <f_detect_config>
 
 Arguments:
-Example:
+Example: python detection_from_raw_pred.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml nms1.yaml
 """
 
 from __future__ import absolute_import
@@ -25,16 +26,22 @@ from sportvu.data.dataset import BaseDataset
 from sportvu.detect.running_window_p import RunWindowP
 from sportvu.detect.nms import NMS
 from sportvu.detect.utils import smooth_1D_array
+from sportvu import data
+# configuration
+import config as CONFIG
+
 arguments = docopt(__doc__)
 print ("...Docopt... ")
 print(arguments)
 print ("............\n")
 
-f_data_config = arguments['<f_data_config>']
-f_model_config = arguments['<f_model_config>']
-f_detect_config = arguments['<f_detect_config>']
-if arguments['--train']:
-    dataset = BaseDataset(f_data_config, fold_index=int(arguments['<fold_index>']), load_raw=True)
+game_dir = data.constant.game_dir
+pnr_dir = os.path.join(game_dir, 'pnr-annotations')
+
+f_data_config = '%s/%s' % (CONFIG.data.config.dir,arguments['<f_data_config>'])
+f_model_config = '%s/%s' % (CONFIG.model.config.dir,arguments['<f_model_config>'])
+f_detect_config = '%s/%s' % (CONFIG.detect.config.dir,arguments['<f_detect_config>'])
+
 # pre_trained = arguments['<pre_trained>']
 data_config = yaml.load(open(f_data_config, 'rb'))
 model_config = yaml.load(open(f_model_config, 'rb'))
@@ -43,10 +50,12 @@ data_name = os.path.basename(f_data_config).split('.')[0]
 exp_name = '%s-X-%s' % (model_name, data_name)
 detect_config = yaml.load(open(f_detect_config, 'rb'))
 
+data_config['data_config']['game_ids'] = data_config['data_config']['detect_tweak']
 detector = eval(detect_config['class'])(detect_config)
+dataset = BaseDataset(data_config, fold_index=int(arguments['<fold_index>']), load_raw=True)
 
 
-plot_folder = os.path.join('./plots', exp_name)
+plot_folder = '%s/%s' % (CONFIG.plots.dir,exp_name)
 if not os.path.exists(plot_folder):
     raise Exception('Run test.py first to get raw predictions')
 
@@ -60,32 +69,35 @@ plt.figure()
 if arguments['--train']:
     split = 'train'
 else:
-    split = 'val'
-all_pred_f = filter(lambda s:'.pkl' in s and split in s 
-                    and 'meta' not in s,os.listdir(os.path.join(plot_folder,'pkl')))
-if arguments['--train']:
-    annotations = []
+    split = 'raw'
+# all_pred_f = filter(lambda s:'.pkl' in s and split in s and 'meta' not in s,os.listdir('%s/pkl'%(plot_folder)))
+all_pred_f = filter(lambda s:'raw-' in s and 'raw-meta' not in s,os.listdir('%s/pkl'%(plot_folder)))
+# if arguments['--train']:
+annotations = []
 for _, f in tqdm(enumerate(all_pred_f)):
+    file_split = int(f.split('.')[0].split('-')[1])
     ind = int(f.split('.')[0].split('-')[1])
-    gameclocks, pnr_probs, labels = pkl.load(open(os.path.join(plot_folder,'pkl/%s-%i.pkl'%(split,ind)), 'rb'))
-    meta = pkl.load( open(
-            os.path.join(plot_folder, 'pkl/%s-meta-%i.pkl' %(split, ind)), 'rb'))
+    gameclocks, pnr_probs, labels = pkl.load(open('%s/pkl/%s-%i.pkl'%(plot_folder,split,ind), 'rb'))
+    meta = pkl.load(open('%s/pkl/%s-meta-%i.pkl' %(plot_folder,split, ind), 'rb'))
     cands, mp, frame_indices = detector.detect(pnr_probs, gameclocks, True)
-    print (cands)
+    prob_max = np.max(pnr_probs)
     plt.plot(gameclocks, pnr_probs, '-')
+
+
     if mp is not None:
         plt.plot(gameclocks, mp, '-')
     plt.plot(np.array(labels), np.ones((len(labels))), '.')
-    for ind, cand in enumerate(cands):
+    for frame_ind, cand in enumerate(cands):
         cand_x = np.arange(cand[1], cand[0], .1)
         plt.plot(cand_x, np.ones((len(cand_x))) * .95, '-' )
         ## if FP, record annotations
-        if arguments['--train'] and not label_in_cand(cand, labels):
-            anno = {'gameid':meta[1], 'gameclock':gameclocks[frame_indices[ind]],
+        if not label_in_cand(cand, labels):
+            anno = {'gameid':meta[1], 'gameclock':gameclocks[frame_indices[frame_ind]],
                     'eid':meta[0], 'quarter':dataset.games[meta[1]]['events'][meta[0]]['quarter']}
             annotations.append(anno)
     plt.ylim([0,1])
-    plt.title('Game: %s, Event: %i'%(meta[1], meta[0]))
-    plt.savefig(os.path.join(plot_folder, '%s-%s-%i.png' %(detect_config['class'], split, ind)))
+    plt.title('Game: %s, Event: %i, Max Prob: %f' % (meta[1], meta[0], prob_max))
+    plt.savefig('%s/%s-%s-%i.png' %(plot_folder,detect_config['class'], split, ind))
     plt.clf()
-pkl.dump(annotations, open(os.path.join(plot_folder,'pkl/hard-negative-examples.pkl'), 'wb'))
+pkl.dump(annotations, open('%s/pkl/hard-negative-examples.pkl'%(plot_folder), 'wb'))
+pkl.dump(annotations, open('%s/gt/hard-negative-examples.pkl'%(pnr_dir), 'wb'))

@@ -40,8 +40,7 @@ class EncDec:
         # placeholders
         tf_dec_input = tf.placeholder(tf.float32, [self.batch_size, self.decoder_time_size, 2])
         keep_prob = tf.placeholder(tf.float32)
-        if self.decoder_init_noise is not None:
-            self.pl_decoder_noise_level = tf.placeholder(tf.float32, [])
+        self.pl_decoder_noise_level = tf.placeholder(tf.float32, [])
         if self.decoder_input_keep_prob is not None:
             self.pl_decoder_input_keep_prob = tf.placeholder(tf.float32, [])
         else:

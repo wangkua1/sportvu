@@ -192,7 +192,7 @@ class BaseLoader:
             ret = 0
         else:
             if extract:
-                ret_val = self.extractor.extract_batch(ret_val, player_id=player_id,dont_resolve_basket=dont_resolve_basket)
+                ret_val = self.extractor.extract_batch(ret_val,dont_resolve_basket=dont_resolve_basket)
             ret = [ret_val, ret_gameclocks, ret_frame_idx]
         return ret
 
@@ -238,7 +238,7 @@ class BaseLoader:
 
 class PreprocessedLoader:
     def __init__(self, dataset, extractor, batch_size, mode='sample', fraction_positive=.5):
-        """ 
+        """
         simply loads numpy matrices from disk without preprocessing
         """
         self.dataset = dataset  # not used
@@ -280,7 +280,7 @@ class PreprocessedLoader:
 
 class EventLoader:
     def __init__(self, dataset, extractor, batch_size, mode='sample', fraction_positive=.5):
-        """ 
+        """
         In between Base and Preproc.
         Loads extracted Events from disk, and does extraction
         note: a lot faster than Base because it doesn't need to to extraction
@@ -339,7 +339,7 @@ class EventLoader:
 class SequenceLoader:
     def __init__(self, dataset, extractor, batch_size, mode='sample',
                  fraction_positive=.5, negative_fraction_hard=0):
-        """ 
+        """
         """
         self.negative_fraction_hard = negative_fraction_hard
         self.dataset = dataset  # not used
@@ -385,6 +385,7 @@ class SequenceLoader:
     def next_batch(self, extract=True):
         # if self.batch_index == self.dataset_size:
         #     return None
+
         if self.pos_ind + self.N_pos >= self.pos_x.shape[0]:
             self.pos_ind = 0
             self.pos_x, self.pos_t = shuffle_2_array(self.pos_x, self.pos_t)
@@ -436,7 +437,7 @@ class Seq2SeqLoader:
     def __init__(self, dataset, extractor, batch_size, mode='sample',
                  fraction_positive=.5, negative_fraction_hard=0,
                  use_filter_discontinuous=True, move_N_neg_to_val=0):
-        """ 
+        """
         """
         self.negative_fraction_hard = negative_fraction_hard
         self.dataset = dataset  # not used
@@ -538,6 +539,107 @@ class Seq2SeqLoader:
     def reset(self):
         self.batch_index = 0
 
+class LSTMLoader:
+    def __init__(self, dataset, extractor, batch_size, mode='sample',
+                 fraction_positive=.5, negative_fraction_hard=0):
+        """
+		"""
+        self.negative_fraction_hard = negative_fraction_hard
+        self.dataset = dataset  # not used
+        self.root_dir = os.path.join(os.path.join(data_dir, self.dataset.config[
+            'preproc_dir']), str(self.dataset.fold_index))
+        self.extractor = extractor
+        self.batch_size = batch_size  # not used
+        self.fraction_positive = fraction_positive
+        self.mode = mode
+        self.batch_index = 0
+        # self.dataset_size = self.dataset.config['n_batches']
+        self.pos_x = np.load(os.path.join(self.root_dir, 'pos_x.npy'))
+        self.neg_x = np.load(os.path.join(self.root_dir, 'neg_x.npy'))
+        self.pos_t = np.load(os.path.join(self.root_dir, 'pos_t.npy'))
+        # self.neg_t = np.load(os.path.join(self.root_dir, 'neg_t.npy'))
+        self.neg_t = np.array([[1, 0]]).repeat(self.neg_x.shape[0], axis=0)
+        if self.negative_fraction_hard > 0:
+            self.hard_neg_x = np.load(os.path.join(self.root_dir, 'hard_neg_x.npy'))
+            self.hard_neg_t = np.load(os.path.join(self.root_dir, 'hard_neg_t.npy'))
+        self.val_x = np.load(os.path.join(self.root_dir, 'vx.npy'))
+        self.val_t = np.load(os.path.join(self.root_dir, 'vt.npy'))
+        self.pos_ind = 0
+        self.neg_ind = 0
+        self.val_ind = 0
+        self.N_pos = int(batch_size * fraction_positive)
+        self.N_neg = batch_size - self.N_pos
+        if self.negative_fraction_hard > 0:
+            self.N_hard_neg = int(self.N_neg * negative_fraction_hard)
+            self.N_neg = self.N_neg - self.N_hard_neg
+            self.hard_neg_ind = 0
+
+    def next(self):
+        """
+		"""
+        if self.mode == 'sample':
+            return self.next_batch()
+        elif self.mode == 'valid':
+            return self.load_valid()
+        else:
+            raise Exception('unknown loader mode')
+
+    def next_batch(self, extract=True):
+        # if self.batch_index == self.dataset_size:
+        #     return None
+
+        if self.pos_ind + self.N_pos >= self.pos_x.shape[0]:
+            self.pos_ind = 0
+            self.pos_x, self.pos_t = shuffle_2_array(self.pos_x, self.pos_t)
+        if self.neg_ind + self.N_neg >= self.neg_x.shape[0]:
+            self.neg_ind = 0
+            self.neg_x, self.neg_t = shuffle_2_array(self.neg_x, self.neg_t)
+        if (self.negative_fraction_hard > 0 and
+                        self.hard_neg_ind + self.N_hard_neg >= self.hard_neg_x.shape[0]):
+            self.hard_neg_ind = 0
+            self.hard_neg_x, self.hard_neg_t = shuffle_2_array(
+                self.hard_neg_x, self.hard_neg_t)
+
+        s = list(self.pos_x.shape)
+        s[0] = self.batch_size
+        x = np.zeros(s)
+        t = np.zeros((self.batch_size, 2))
+        x[:self.N_pos] = self.pos_x[self.pos_ind:self.pos_ind + self.N_pos]
+        t[:self.N_pos] = self.pos_t[self.pos_ind:self.pos_ind + self.N_pos]
+        if not self.negative_fraction_hard > 0:
+            x[self.N_pos:] = self.neg_x[self.neg_ind:self.neg_ind + self.N_neg]
+            t[self.N_pos:] = self.neg_t[self.neg_ind:self.neg_ind + self.N_neg]
+        else:
+            x[self.N_pos:self.N_pos + self.N_hard_neg] = self.hard_neg_x[
+                                                         self.hard_neg_ind:self.hard_neg_ind + self.N_hard_neg]
+            t[self.N_pos:self.N_pos + self.N_hard_neg] = self.hard_neg_t[
+                                                         self.hard_neg_ind:self.hard_neg_ind + self.N_hard_neg]
+            x[self.N_pos + self.N_hard_neg:] = self.neg_x[self.neg_ind:self.neg_ind + self.N_neg]
+            t[self.N_pos + self.N_hard_neg:] = self.neg_t[self.neg_ind:self.neg_ind + self.N_neg]
+        if extract:
+            x = self.extractor.extract_batch(x, input_is_sequence=True)
+        self.pos_ind += self.N_pos
+        self.neg_ind += self.N_neg
+        if self.negative_fraction_hard > 0:
+            self.hard_neg_ind += self.N_hard_neg
+        return x, t
+
+    def load_valid(self, extract=True):
+        if self.val_ind + self.batch_size > len(self.val_x):
+            self.val_ind = 0
+            return None
+        x = self.val_x[self.val_ind:self.val_ind + self.batch_size]
+        t = self.val_t[self.val_ind:self.val_ind + self.batch_size]
+        if extract:
+            x = self.extractor.extract_batch(x, input_is_sequence=True)
+        self.val_ind += self.batch_size
+        return x, t
+
+    def reset(self):
+        self.batch_index = 0
+
+    def reset(self):
+        self.batch_index = 0
 
 if __name__ == '__main__':
     # from sportvu.data.dataset import BaseDataset

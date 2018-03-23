@@ -9,8 +9,7 @@ Arguments:
     <f_model_config> example 'model/config/conv2d-3layers.yaml'
 
 Example:
-    python train.py 0 data/config/train_rev0.yaml model/config/conv2d-3layers.yaml
-    python train.py 0 data/config/train_rev0_vid.yaml model/config/conv3d-1.yaml
+    python train-seq2seq.py 0 rev3-ed-target-history.yaml ed-target-history.yaml
 Options:
     --negative_fraction_hard=<percent> [default: 0]
 """
@@ -24,11 +23,6 @@ import tensorflow as tf
 optimize_loss = tf.contrib.layers.optimize_loss
 import sys
 import os
-if os.environ['HOME'] == '/u/wangkua1':  # jackson guppy
-    sys.path.append('/u/wangkua1/toolboxes/resnet')
-else:
-    sys.path.append('/ais/gobi4/slwang/sports/sportvu/resnet')
-    sys.path.append('/ais/gobi4/slwang/sports/sportvu')
 from sportvu.model.seq2seq import Seq2Seq
 from sportvu.model.encdec import EncDec
 # data
@@ -36,7 +30,7 @@ from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import Seq2SeqExtractor, EncDecExtractor
 from sportvu.data.loader import Seq2SeqLoader
 # concurrent
-from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
+# from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
 from tqdm import tqdm
 from docopt import docopt
 import yaml
@@ -44,7 +38,8 @@ import gc
 from utils import truncated_mean, experpolate_position
 from vis_utils import make_sequence_prediction_image
 import cPickle as pkl
-# import matplotlib.pylab as plt
+import config as CONFIG
+import matplotlib.pylab as plt
 # plt.ioff()
 # fig = plt.figure()
 
@@ -60,6 +55,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     loader = Seq2SeqLoader(dataset, extractor, data_config[
         'batch_size'], fraction_positive=0.5,
         negative_fraction_hard=nfh, move_N_neg_to_val=1000)
+
     Q_size = 100
     N_thread = 4
     # cloader = ConcurrentBatchIterator(
@@ -158,7 +154,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             continue
         if iter_ind>0 and iter_ind % 5000 == 0:
             tfs -= 5
-        feed_dict = net.input(dec_input, 
+        feed_dict = net.input(dec_input,
                                 teacher_forcing_stop=np.max([1, tfs]),
                                 enc_input=enc_input
                                 )
@@ -184,7 +180,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                     # print ('...')
                     break
                 ## teacher-forced loss
-                feed_dict = net.input(dec_input, 
+                feed_dict = net.input(dec_input,
                                 teacher_forcing_stop=None,
                                 enc_input=enc_input,
                                 enc_keep_prob = 1.,
@@ -195,7 +191,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 val_loss = sess.run(euclid_loss, feed_dict = feed_dict)
                 val_tf_loss.append(val_loss)
                 ## real-loss
-                feed_dict = net.input(dec_input, 
+                feed_dict = net.input(dec_input,
                                 teacher_forcing_stop=1,
                                 enc_input=enc_input,
                                 enc_keep_prob = 1.,
@@ -216,8 +212,8 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 # for i in xrange(5):
                 #     plt.imshow(imgs[i])
                 #     plt.savefig(os.path.join("./saves/", exp_name +'iter-%g-%g.png'%(iter_ind,i)))
-                
-                
+
+
             ## TODO: evaluate real-loss on training set
             val_tf_loss = np.mean(val_tf_loss)
             val_real_loss = np.mean(val_real_loss)
@@ -246,8 +242,8 @@ if __name__ == '__main__':
     print ("...Docopt... ")
     print(arguments)
     print ("............\n")
-    f_data_config = arguments['<f_data_config>']
-    f_model_config = arguments['<f_model_config>']
+    f_data_config = '%s/%s' % (CONFIG.data.config.dir,arguments['<f_data_config>'])
+    f_model_config = '%s/%s' % (CONFIG.model.config.dir,arguments['<f_model_config>'])
 
     data_config = yaml.load(open(f_data_config, 'rb'))
     model_config = yaml.load(open(f_model_config, 'rb'))

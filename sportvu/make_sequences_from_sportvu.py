@@ -2,12 +2,13 @@
 
 Usage:
     make_sequences_from_sportvu.py <f_data_config> --sample
-    make_sequences_from_sportvu.py <f_data_config> 
+    make_sequences_from_sportvu.py <f_data_config>
 
 Arguments:
-    <f_data_config>  example ''data/config/rev2.yaml''
+    <f_data_config>  example ''rev3_1-bmf-25x25.yaml''
 
 Example:
+    python make_sequences_from_sportvu.py rev3_1-bmf-25x25.yaml
 """
 from sportvu.data.dataset import BaseDataset
 from sportvu.data.extractor import BaseExtractor
@@ -19,12 +20,15 @@ from docopt import docopt
 import yaml
 import numpy as np
 from sportvu.data.utils import make_3teams_11players
+# configuration
+import config as CONFIG
+
 arguments = docopt(__doc__)
 print ("...Docopt... ")
 print(arguments)
 print ("............\n")
 
-f_data_config = arguments['<f_data_config>']
+f_data_config = '%s/%s'%(CONFIG.data.config.dir,arguments['<f_data_config>'])
 data_config = yaml.load(open(f_data_config, 'rb'))
 
 # make a new data directions
@@ -58,11 +62,15 @@ for fold_index in tqdm(xrange(1)): ## I have never actually used more than 1 fol
     np.save(os.path.join(curr_folder, 'vx'), vx)
     np.save(os.path.join(curr_folder, 'vt'), vt)
 
+    del vx, vt
+
     x, t = loader.load_train(extract=False, positive_only=True)
     x = np.array([make_3teams_11players(extractor.extract_raw(e))
                   for e in x])
     np.save(os.path.join(curr_folder, 'pos_x'), x)
     np.save(os.path.join(curr_folder, 'pos_t'), t)
+
+    del x
 
     if arguments['--sample']:
         x, t = loader.next_batch(extract=False)
@@ -70,7 +78,7 @@ for fold_index in tqdm(xrange(1)): ## I have never actually used more than 1 fol
         xs = []
         ind = 0
         while True:
-            print (ind)
+            print ('%i/%i' % (ind, len(dataset.train_hash)))
             print (len(xs))
             ind+=1
             loaded = loader.load_split_event('train',extract=False)
@@ -89,11 +97,36 @@ for fold_index in tqdm(xrange(1)): ## I have never actually used more than 1 fol
                             break
                     if not ispositive:
                         xs.append(x)
+                if ind % 100 == 0 and ind > 100:
+                    print('Saving split')
+                    # npy file was written from previous split
+                    x = xs
+                    xs = []
+                    x = np.array([make_3teams_11players(extractor.extract_raw(e))
+                                  for e in x])
+                    x_arr = np.load(os.path.join(curr_folder, 'neg_x.npy'))
+                    x_arr = np.append(x_arr,x,axis=0)
+                    np.save(os.path.join(curr_folder, 'neg_x'), x_arr)
+                    del x_arr, x
+                elif ind % 100 == 0 and ind == 100:
+                    print('Saving split')
+                    # no split has been written to file
+                    x = xs
+                    xs = []
+                    x = np.array([make_3teams_11players(extractor.extract_raw(e))
+                                  for e in x])
+                    np.save(os.path.join(curr_folder, 'neg_x'), x)
+                    del x
             else:
+                print('Saving split')
+                # last split
                 x = xs
+                x = np.array([make_3teams_11players(extractor.extract_raw(e))
+                              for e in x])
+                x_arr = np.load(os.path.join(curr_folder, 'neg_x.npy'))
+                x_arr = np.append(x_arr,x,axis=0)
+                np.save(os.path.join(curr_folder, 'neg_x'), x_arr)
+                del x_arr, xs, x
                 break
 
-    x = np.array([make_3teams_11players(extractor.extract_raw(e))
-                  for e in x])
-    np.save(os.path.join(curr_folder, 'neg_x'), x)
     np.save(os.path.join(curr_folder, 'neg_t'), t)

@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import cPickle as pickle
+from sportvu.data.constant import data_dir, game_dir, court_path
 
 color_dict = {
     1610612737: ('#E13A3E', 'ATL'),
@@ -60,9 +61,9 @@ gameid='0021500009'
 
 # directories
 # CHANGE HERE
-data_dir = '/home/wangkua1/Downloads/'
-game_dir = data_dir+'raptors/data/'
-court_path = data_dir + 'raptors/data/nba_court_T.png'
+# data_dir = '/home/wangkua1/Downloads/'
+# game_dir = data_dir+'raptors/data/'
+# court_path = data_dir + 'raptors/data/nba_court_T.png'
 
 
 #open the pickle file
@@ -205,5 +206,3 @@ plt.xlim([0,94])
 plt.ylim([0,50])
 
 plt.tight_layout(pad=0, w_pad=0.5, h_pad=0)
-
-

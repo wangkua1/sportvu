@@ -1,16 +1,17 @@
 """train.py
 
 Usage:
-    train.py <fold_index> <f_data_config> <f_model_config> 
-    train.py --test <fold_index> <f_data_config> <f_model_config>
+    train.py <fold_index> <f_data_config> <f_model_config>
+    train.py --test <fold_index> <f_data_config> <f_model_config> <every_K_frame>
+    train.py --test  --train <fold_index> <f_data_config> <f_model_config> <every_K_frame>
 
 Arguments:
     <f_data_config>  example ''data/config/train_rev0.yaml''
     <f_model_config> example 'model/config/conv2d-3layers.yaml'
 
 Example:
-    python train.py 0 data/config/train_rev0.yaml model/config/conv2d-3layers.yaml
-    python train.py 0 data/config/train_rev0_vid.yaml model/config/conv3d-1.yaml
+    python train.py 0 rev3_1-bmf-25x25.yaml conv2d-3layers-25x25.yaml --test --train 5
+    python train.py 0 rev3-lstm.yaml lstm1.yaml
 Options:
     --negative_fraction_hard=<percent> [default: 0]
 """
@@ -24,24 +25,30 @@ import tensorflow as tf
 optimize_loss = tf.contrib.layers.optimize_loss
 import sys
 import os
-if os.environ['HOME'] == '/u/wangkua1':  # jackson guppy
-    sys.path.append('/u/wangkua1/toolboxes/resnet')
-else:
-    sys.path.append('/ais/gobi4/slwang/sports/sportvu/resnet')
-    sys.path.append('/ais/gobi4/slwang/sports/sportvu')
-from sportvu.model.convnet2d import ConvNet2d
+import matplotlib.pyplot as plt
+# if os.environ['HOME'] == '/u/wangkua1':  # jackson guppy
+#     sys.path.append('/u/wangkua1/toolboxes/resnet')
+# else:
+#     sys.path.append('/ais/gobi4/slwang/sports/sportvu/resnet')
+#     sys.path.append('/ais/gobi4/slwang/sports/sportvu')
+from sportvu.model.convnet2d import ConvNet2d, ConvNet2dDeep
+from sportvu.model.lstm import LSTM
 from sportvu.model.convnet3d import ConvNet3d
 # data
 from sportvu.data.dataset import BaseDataset
-from sportvu.data.extractor import BaseExtractor
-from sportvu.data.loader import PreprocessedLoader, EventLoader, SequenceLoader
+from sportvu.data.extractor import BaseExtractor, LSTMExtractor, Seq2SeqExtractor
+from sportvu.data.loader import PreprocessedLoader, EventLoader, SequenceLoader, BaseLoader, LSTMLoader, Seq2SeqLoader
+# configuration
+import config as CONFIG
+# sanity
+from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
 # concurrent
-from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
+# from resnet.utils.concurrent_batch_iter import ConcurrentBatchIterator
 from tqdm import tqdm
 from docopt import docopt
 import yaml
 import gc
-
+import cPickle as pkl
 
 
 def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, testing=False):
@@ -50,29 +57,45 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     extractor = BaseExtractor(data_config)
     if 'negative_fraction_hard' in data_config:
         nfh = data_config['negative_fraction_hard']
+        pfh = 1 - nfh
     else:
         nfh = 0
-    if ('version' in data_config['extractor_config']
-            and data_config['extractor_config']['version'] >= 2):
-        loader = SequenceLoader(dataset, extractor, data_config[
-                                'batch_size'], fraction_positive=0.5,
-                                negative_fraction_hard=nfh)
+        pfh = 0.5
+    if model_config['class_name'] == 'LSTM':
+        extractor = LSTMExtractor(data_config)
+        loader = LSTMLoader(
+            dataset,
+            extractor,
+            data_config['batch_size'],
+            fraction_positive=pfh,
+            negative_fraction_hard=nfh
+        )
+    elif 'version' in data_config['extractor_config'] and data_config['extractor_config']['version'] >= 2:
+        loader = SequenceLoader(
+            dataset,
+            extractor,
+            data_config['batch_size'],
+            fraction_positive=pfh,
+            negative_fraction_hard=nfh
+        )
     elif 'no_extract' in data_config and data_config['no_extract']:
         loader = EventLoader(dataset, extractor, None, fraction_positive=0.5)
     else:
-        loader = PreprocessedLoader(
-            dataset, extractor, None, fraction_positive=0.5)
+        loader = PreprocessedLoader(dataset, extractor, None, fraction_positive=0.5)
     Q_size = 100
     N_thread = 4
     # cloader = ConcurrentBatchIterator(
     #     loader, max_queue_size=Q_size, num_threads=N_thread)
     cloader = loader
 
+    if loader.__class__.__name__ == 'Seq2SeqLoader':
+        val_x, output, target_sequence, target_output = loader.load_valid()
+    else:
+        val_x, val_t = loader.load_valid()
 
-    val_x, val_t = loader.load_valid()
-    if model_config['class_name'] == 'ConvNet2d':
+    if model_config['class_name'] == 'ConvNet2d' or model_config['class_name'] == 'ConvNet2dDeep':
         val_x = np.rollaxis(val_x, 1, 4)
-    elif model_config['class_name'] == 'ConvNet3d':
+    elif model_config['class_name'] == 'ConvNet3d' or model_config['class_name'] == 'LSTM':
         val_x = np.rollaxis(val_x, 1, 5)
     else:
         raise Exception('input format not specified')
@@ -82,51 +105,128 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
 
     # build loss
     y_ = tf.placeholder(tf.float32, [None, 2])
-    learning_rate = tf.placeholder(tf.float32, [])
-    cross_entropy = tf.reduce_mean(
-        tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=net.output()))
-    # train_step = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
-    global_step = tf.Variable(0)
-    # train_step = optimize_loss(cross_entropy, global_step, learning_rate, 
-    #             optimizer=lambda lr: tf.train.AdamOptimizer(lr))
-    train_step = optimize_loss(cross_entropy, global_step, learning_rate, 
-                optimizer=lambda lr: tf.train.MomentumOptimizer(lr, .9))
+    weights = tf.trainable_variables()
+    l2_loss = tf.add_n([tf.nn.l2_loss(w) for w in weights]) * 0.001
+    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=net.output()))
+    loss = tf.reduce_mean(cross_entropy + l2_loss)
+
+    # optimize
+    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    with tf.control_dependencies(update_ops):
+        # Ensures that we execute the update_ops before performing the train_step
+        # train_step = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
+        global_step = tf.Variable(0)
+        learning_rate = tf.placeholder(tf.float32, [])
+        training = tf.placeholder(tf.bool)
+        # learning_rate = tf.train.exponential_decay(init_lr, global_step, 10000, 0.96, staircase=True)
+        # train_step = optimize_loss(cross_entropy, global_step, learning_rate,
+        #             optimizer=lambda lr: tf.train.AdamOptimizer(lr))
+        # train_step = optimize_loss(cross_entropy, global_step, learning_rate,
+        #             optimizer=lambda lr: tf.train.MomentumOptimizer(lr, .9))
+        # train_step = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(cross_entropy, global_step=global_step)
+        train_step = optimize_loss(cross_entropy, global_step, learning_rate, optimizer=lambda lr: tf.train.AdamOptimizer(lr, .9))
+
+    # reporting
     correct_prediction = tf.equal(tf.argmax(net.output(), 1), tf.argmax(y_, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    predictions = tf.argmax(net.output(), 1)
+    true_labels = tf.argmax(y_, 1)
+    confusion_matrix = tf.confusion_matrix(labels=true_labels, predictions=predictions, num_classes=2)
 
+    tp = tf.count_nonzero(predictions * true_labels)
+    tn = tf.count_nonzero((predictions - 1) * (true_labels - 1))
+    fp = tf.count_nonzero(predictions * (true_labels - 1))
+    fn = tf.count_nonzero((predictions - 1) * true_labels)
+
+    accuracy = (tp + tn) / (tp + fp + fn + tn)
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+    fmeasure = (2 * precision * recall) / (precision + recall)
 
     # testing
     if testing:
+
+        every_K_frame = int(arguments['<every_K_frame>'])
+        plot_folder = '%s/%s' % (CONFIG.plots.dir, exp_name)
+        if not os.path.exists('%s/pkl'%(plot_folder)):
+            os.makedirs('%s/pkl'%(plot_folder))
+
         saver = tf.train.Saver()
         sess = tf.InteractiveSession()
-        ckpt_path = os.path.join("./saves/", exp_name + '.ckpt.best')
+        ckpt_path = '%s/%s.ckpt.best' % (CONFIG.saves.dir,exp_name)
         saver.restore(sess, ckpt_path)
 
         feed_dict = net.input(val_x, 1, False)
         feed_dict[y_] = val_t
         ce, val_accuracy = sess.run([cross_entropy, accuracy], feed_dict=feed_dict)
         print ('Best Validation CE: %f, Acc: %f' % (ce, val_accuracy))
+
+        # test section
+        dataset = BaseDataset(f_data_config, int(arguments['<fold_index>']), load_raw=True)
+        extractor = BaseExtractor(f_data_config)
+        loader = BaseLoader(dataset, extractor, data_config['batch_size'], fraction_positive=0.5)
+        cloader = loader
+
+        ind = 0
+        while True:
+            print (ind)
+            if arguments['--train']:
+                split = 'train'
+            else:
+                split = 'val'
+
+            loaded = cloader.load_split_event(split, True, every_K_frame)
+            if loaded is not None:
+                if loaded == 0:
+                    ind+=1
+                    continue
+                batch_xs, labels, gameclocks, meta = loaded
+            else:
+                print ('Bye')
+                sys.exit(0)
+            if model_config['class_name'] == 'ConvNet2d':
+                batch_xs = np.rollaxis(batch_xs, 1, 4)
+            elif model_config['class_name'] == 'ConvNet3d':
+                batch_xs = np.rollaxis(batch_xs, 1, 5)
+            else:
+                raise Exception('input format not specified')
+
+            feed_dict = net.input(batch_xs, None, True)
+            probs = sess.run(tf.nn.softmax(net.output()), feed_dict=feed_dict)
+
+            # save the raw predictions
+            probs = probs[:, 1]
+            pkl.dump([gameclocks, probs, labels], open('%s/pkl/%s-%i.pkl'%(plot_folder,split, ind), 'w'))
+            pkl.dump(meta, open('%s/pkl/%s-meta-%i.pkl'%(plot_folder,split, ind), 'w'))
+            ind += 1
+
         sys.exit(0)
 
     # checkpoints
-    if not os.path.exists('./saves'):
-        os.mkdir('./saves')
+    if not os.path.exists(CONFIG.saves.dir):
+        os.mkdir(CONFIG.saves.dir)
     # tensorboard
-    if not os.path.exists('./logs'):
-        os.mkdir('./logs')
+    if not os.path.exists(CONFIG.logs.dir):
+        os.mkdir(CONFIG.logs.dir)
+
     tf.summary.scalar('cross_entropy', cross_entropy)
-    tf.summary.scalar('accuray', accuracy)
-    if model_config['class_name'] == 'ConvNet2d':
-        tf.summary.image('input', net.x, max_outputs=4)
-    elif model_config['class_name'] == 'ConvNet3d':
-        tf.summary.image('input', tf.reduce_sum(net.x, 1), max_outputs=4)
-    else:
-        raise Exception('input format not specified')
+    tf.summary.scalar('Loss', loss)
+    tf.summary.scalar('Accuracy', accuracy)
+    tf.summary.scalar('Precision', precision)
+    tf.summary.scalar('Recall', recall)
+    tf.summary.scalar('F-Score', fmeasure)
     tf.summary.histogram('label_distribution', y_)
     tf.summary.histogram('logits', net.logits)
 
+    if model_config['class_name'] == 'ConvNet2d' or model_config['class_name'] == 'ConvNet2dDeep':
+        tf.summary.image('input', net.x, max_outputs=4)
+    elif model_config['class_name'] == 'ConvNet3d' or model_config['class_name'] == 'LSTM':
+        tf.summary.image('input', tf.reduce_sum(net.x, 1), max_outputs=4)
+    else:
+        raise Exception('input format not specified')
+
     merged = tf.summary.merge_all()
-    log_folder = os.path.join('./logs', exp_name)
+    log_folder = '%s/%s' % (CONFIG.logs.dir,exp_name)
 
     saver = tf.train.Saver()
     best_saver = tf.train.Saver()
@@ -137,8 +237,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
         import shutil
         shutil.rmtree(log_folder)
 
-    train_writer = tf.summary.FileWriter(
-        os.path.join(log_folder, 'train'), sess.graph)
+    train_writer = tf.summary.FileWriter(os.path.join(log_folder, 'train'), sess.graph)
     val_writer = tf.summary.FileWriter(os.path.join(log_folder, 'val'), sess.graph)
     tf.global_variables_initializer().run()
     # Train
@@ -155,15 +254,33 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
         else:
             cloader.reset()
             continue
-        if model_config['class_name'] == 'ConvNet2d':
+        if model_config['class_name'] == 'ConvNet2d' or model_config['class_name'] == 'ConvNet2dDeep':
             batch_xs = np.rollaxis(batch_xs, 1, 4)
         elif model_config['class_name'] == 'ConvNet3d':
             batch_xs = np.rollaxis(batch_xs, 1, 5)
+        elif model_config['class_name'] == 'LSTM':
+            batch_xs = np.rollaxis(batch_xs, 1, 5)
+            batch_xs = batch_xs[:, ::model_config['model_config']['frame_rate']]
         else:
             raise Exception('input format not specified')
+
+        # check
+        # if model_config['class_name'] == 'LSTM':
+        #     for ind, batch_img in enumerate(batch_xs):
+        #         img = np.sum(batch_img, axis=0)
+        #         plt.imshow(img)
+        #         plt.show()
+        #         plt.close()
+        # elif model_config['class_name'] == 'ConvNet2d':
+        #     for ind, batch_img in enumerate(batch_xs):
+        #         plt.imshow(batch_img)
+        #         plt.show()
+        #         plt.close()
+
+
         feed_dict = net.input(batch_xs, None, True)
         feed_dict[y_] = batch_ys
-        if iter_ind ==max_iter//2:
+        if iter_ind % 5000 == 0 and iter_ind > 0:
             lrv *= .1
         feed_dict[learning_rate] = lrv
         summary, _ = sess.run([merged, train_step], feed_dict=feed_dict)
@@ -172,23 +289,50 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             feed_dict = net.input(batch_xs, 1, False)
             feed_dict[y_] = batch_ys
             train_accuracy = accuracy.eval(feed_dict=feed_dict)
+            train_ce = cross_entropy.eval(feed_dict=feed_dict)
+            train_confusion_matrix = confusion_matrix.eval(feed_dict=feed_dict)
+
             # validate trained model
-            feed_dict = net.input(val_x, 1, False)
-            feed_dict[y_] = val_t
-            summary, val_ce, val_accuracy = sess.run(
-                [merged, cross_entropy, accuracy], feed_dict=feed_dict)
+            if model_config['class_name'] == 'LSTM':
+                # model does not fit full val set, need to run minibatches
+                val_tf_loss = []
+                val_tf_accuracy = []
+                while True:
+                    loaded = cloader.load_valid()
+                    if loaded is not None:
+                        val_x, val_t = loaded
+                        val_x = np.rollaxis(val_x, 1, 5)
+                        val_x = val_x[:,::model_config['model_config']['frame_rate']]
+                        feed_dict = net.input(val_x, 1, False)
+                        feed_dict[y_] = val_t
+                        summary, val_ce, val_accuracy = sess.run([merged, cross_entropy, accuracy], feed_dict=feed_dict)
+                        val_tf_loss.append(val_ce)
+                        val_tf_accuracy.append(val_accuracy)
+                    else:  ## done
+                        summary, val_ce, val_accuracy = sess.run([merged, cross_entropy, accuracy], feed_dict=feed_dict)
+                        val_tf_loss.append(val_ce)
+                        val_tf_accuracy.append(val_accuracy)
+                        val_ce = np.mean(val_tf_loss)
+                        val_accuracy = np.mean(val_accuracy)
+                        break
+            else:
+                feed_dict = net.input(val_x, 1, False)
+                feed_dict[y_] = val_t
+                summary, val_ce, val_accuracy = sess.run([merged, cross_entropy, accuracy], feed_dict=feed_dict)
             val_writer.add_summary(summary, iter_ind)
-            print("step %d, training accuracy %g, validation accuracy %g, val ce %g" %
-                  (iter_ind, train_accuracy, val_accuracy, val_ce))
+            print("step %d, training accuracy %g, validation accuracy %g, train ce %g,  val ce %g" %
+                  (iter_ind, train_accuracy, val_accuracy, train_ce, val_ce))
+            # print('Train Confusion Matrix: \n %s' % (str(train_confusion_matrix)))
+
             if val_ce < best_val_ce:
                 best_not_updated = 0
-                p = os.path.join("./saves/", exp_name + '.ckpt.best')
+                p = '%s/%s.ckpt.best' % (CONFIG.saves.dir, exp_name)
                 print ('Saving Best Model to: %s' % p)
                 save_path = best_saver.save(sess, p)
+                tf.train.export_meta_graph('%s.meta' % (p))
                 best_val_ce = val_ce
         if iter_ind % 2000 == 0:
-            save_path = saver.save(sess, os.path.join(
-                "./saves/", exp_name + '%d.ckpt' % iter_ind))
+            save_path = saver.save(sess,'%s/%s-%d.ckpt'%(CONFIG.saves.dir,exp_name,iter_ind))
         if best_not_updated == best_acc_delay:
             break
     return best_val_ce
@@ -199,8 +343,8 @@ if __name__ == '__main__':
     print ("...Docopt... ")
     print(arguments)
     print ("............\n")
-    f_data_config = arguments['<f_data_config>']
-    f_model_config = arguments['<f_model_config>']
+    f_data_config = '%s/%s' % (CONFIG.data.config.dir,arguments['<f_data_config>'])
+    f_model_config = '%s/%s' % (CONFIG.model.config.dir,arguments['<f_model_config>'])
 
 
     data_config = yaml.load(open(f_data_config, 'rb'))
@@ -210,7 +354,7 @@ if __name__ == '__main__':
     exp_name = '%s-X-%s' % (model_name, data_name)
     fold_index = int(arguments['<fold_index>'])
     init_lr = 1e-3
-    max_iter = 10000
-    best_acc_delay = 3000
+    max_iter = 15000
+    best_acc_delay = 5000
     testing = arguments['--test']
     train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay, testing)
