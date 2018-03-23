@@ -1,4 +1,6 @@
 import os
+# edit this during setup for unique data path and project path
+project_dir = ''
 if os.environ['HOME'] == '/u/wangkua1': ## jackson guppy
     data_dir = '/ais/gobi5/wangkua1/data/csc2541/'
 elif os.environ['HOME'] == '/home/wangkua1': ## jackson kintsugi
@@ -7,6 +9,7 @@ elif os.environ['HOME'] == '/u/slwang': ## shenlong guppy/pratt286b
     data_dir = '/ais/gobi5/wangkua1/data/csc2541/'
 elif os.environ['HOME'] == '/home/neil':
     data_dir = '/home/neil/projects/data/sportvu/'
+    project_dir = '/home/neil/projects/sportvu/'
 else:
     raise Exception("Unspecified data_dir, unknown environment")
 
