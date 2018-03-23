@@ -1,7 +1,8 @@
 from _config_section import ConfigSection
 
 import os
-REAL_PATH = os.path.dirname(os.path.realpath(__file__))
+from sportvu.data import constant 
+REAL_PATH = constant.project_dir
 
 data = ConfigSection("data")
 data.dir = "%s/%s" % (REAL_PATH, "data")
